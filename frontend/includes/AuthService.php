@@ -70,6 +70,7 @@ class AuthService {
         $_SESSION['is_admin']   = (bool)$user['acceso_admin'];
         $_SESSION['expires']    = time() + self::SESSION_DURATION;
 
+        $this->setFastApiToken($user['correo']);
         $this->logEvent($user['id_usuario'], 'info', 'auth', 'Login exitoso');
 
         return ['success' => true, 'user' => $user];
@@ -160,5 +161,26 @@ class AuthService {
                 [$userId, $nivel, $modulo, $mensaje, $_SERVER['REMOTE_ADDR'] ?? null]
             );
         } catch (Exception $e) { /* fail silently */ }
+    }
+
+    // Genera un token JWT compatible con FastAPI sin usar librerías externas
+    private function setFastApiToken(string $correo): void {
+        // ESTA CLAVE DEBE SER EXACTAMENTE LA MISMA QUE PUSISTE EN EL .env DE FASTAPI
+        $secret = "UnaClaveSuperSecretaYEsticaParaClawFlow2026"; 
+        
+        $header = json_encode(['alg' => 'HS256', 'typ' => 'JWT']);
+        // FastAPI usa comúnmente 'sub' (subject) para identificar al usuario
+        $payload = json_encode(['sub' => $correo, 'exp' => time() + self::SESSION_DURATION]);
+
+        $base64UrlHeader = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($header));
+        $base64UrlPayload = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($payload));
+        
+        $signature = hash_hmac('sha256', $base64UrlHeader . "." . $base64UrlPayload, $secret, true);
+        $base64UrlSignature = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($signature));
+        
+        $jwt = $base64UrlHeader . "." . $base64UrlPayload . "." . $base64UrlSignature;
+
+        // Guardamos la cookie 'access_token' para que el navegador se la envíe a FastAPI
+        setcookie("access_token", $jwt, time() + self::SESSION_DURATION, "/", "", true, true);
     }
 }

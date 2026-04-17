@@ -3,6 +3,13 @@ require_once __DIR__ . '/includes/AuthService.php';
 
 $auth = new AuthService();
 
+// --- DESTRUIR SESIÓN SI EXPIRÓ EL TOKEN DE FASTAPI ---
+if (isset($_GET['expired']) && $_GET['expired'] == '1') {
+    $auth->logout(); // Limpia la sesión de PHP y las cookies
+    header("Location: /index.php");
+    exit;
+}
+
 // Redirect if already logged in
 if ($auth->isAuthenticated()) {
     header('Location: /dashboard.php');
