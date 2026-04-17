@@ -166,7 +166,7 @@ class AuthService {
     // Genera un token JWT compatible con FastAPI sin usar librerías externas
     private function setFastApiToken(string $correo): void {
         // ESTA CLAVE DEBE SER EXACTAMENTE LA MISMA QUE PUSISTE EN EL .env DE FASTAPI
-        $secret = "UnaClaveSuperSecretaYEsticaParaClawFlow2026"; 
+        $secret = "comflow_secret"; 
         
         $header = json_encode(['alg' => 'HS256', 'typ' => 'JWT']);
         // FastAPI usa comúnmente 'sub' (subject) para identificar al usuario
