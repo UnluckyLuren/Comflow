@@ -1,0 +1,107 @@
+version: '3.9'
+
+services:
+  # ── Nginx + PHP Frontend ──────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: clawflow_frontend
+    restart: always
+    volumes:
+      - ./frontend:/var/www/html
+    depends_on:
+      - mysql
+      - backend
+    networks:
+      - clawflow_net
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: clawflow_nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./frontend:/var/www/html
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - clawflow_net
+
+  # ── FastAPI Backend ───────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: clawflow_backend
+    restart: always
+    environment:
+      - DATABASE_URL=mysql+pymysql://clawflow:clawflow_pass@mysql:3306/clawflow
+      - SECRET_KEY=clawflow_super_secret_key_change_in_production
+      - N8N_HOST=http://n8n:5678
+      - N8N_API_KEY=${N8N_API_KEY:-your_n8n_api_key_here}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-llama3:8b}
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - ENCRYPTION_KEY=clawflow_enc_key_32_chars_exactly
+    volumes:
+      - ./backend:/app
+      - audio_uploads:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - clawflow_net
+
+  # ── MySQL Database ────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: clawflow_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: clawflow
+      MYSQL_USER: clawflow
+      MYSQL_PASSWORD: clawflow_pass
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "clawflow", "-pclawflow_pass"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - clawflow_net
+
+  # ── n8n Automation Engine ─────────────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: clawflow_n8n
+    restart: always
+    environment:
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - N8N_API_KEY=${N8N_API_KEY:-your_n8n_api_key_here}
+      - GENERIC_TIMEZONE=America/Mexico_City
+      - N8N_LOG_LEVEL=info
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - clawflow_net
+
+networks:
+  clawflow_net:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  n8n_data:
+  audio_uploads:
