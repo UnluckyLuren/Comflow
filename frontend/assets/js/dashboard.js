@@ -145,6 +145,17 @@ class DashboardController {
 
     try {
       const res  = await apiFetch('/api/infrastructure/ping-n8n');
+      
+      // 1. Si apiFetch fue interceptado (ej. 401 que redirige), res será undefined.
+      // Debemos detener la ejecución aquí.
+      if (!res) return; 
+
+      // 2. Si el servidor devuelve un error de red o de Nginx (ej. 502 Bad Gateway)
+      // forzamos el catch para no intentar parsear HTML como JSON.
+      if (!res.ok) {
+         throw new Error(`HTTP Error: ${res.status}`);
+      }
+
       const data = await res.json();
 
       if (data.online) {
@@ -154,9 +165,10 @@ class DashboardController {
         dot.className   = 'status-dot offline';
         label.textContent = 'n8n Offline';
       }
-    } catch {
+    } catch (err) {
       dot.className   = 'status-dot offline';
       label.textContent = 'n8n Offline';
+      console.warn('Ping n8n falló:', err.message);
     }
   }
 
