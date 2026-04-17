@@ -17,7 +17,7 @@ from app.services.encryption_service import EncryptionService
 router = APIRouter()
 enc    = EncryptionService()
 
-# Minimal connectivity test endpoints per app
+# endpoints para la app
 _TEST_URLS: dict[str, str] = {
     "Gmail_OAuth":    "https://www.googleapis.com/oauth2/v1/tokeninfo",
     "Google_Drive":   "https://www.googleapis.com/drive/v3/about",

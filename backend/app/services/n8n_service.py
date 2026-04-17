@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-N8N_HOST    = os.getenv("N8N_HOST", "http://n8n:5678")
+N8N_HOST    = os.getenv("N8N_HOST", "http://n8n.curikprojects.me")
 N8N_API_KEY = os.getenv("N8N_API_KEY", "")
 
 

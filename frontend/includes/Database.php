@@ -7,9 +7,9 @@ class Database {
     private PDO $connection;
 
     private string $host     = 'mysql';
-    private string $dbname   = 'clawflow';
-    private string $username = 'clawflow';
-    private string $password = 'clawflow_pass';
+    private string $dbname   = 'comflow_db';
+    private string $username = 'comflow_user';
+    private string $password = 'comflow_pass';
     private string $charset  = 'utf8mb4';
 
     private function __construct() {

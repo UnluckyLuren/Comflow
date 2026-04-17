@@ -83,7 +83,7 @@ class LLMService:
     """
 
     def __init__(self) -> None:
-        self.llm_model   = os.getenv("LLM_MODEL", "llama3:8b")
+        self.llm_model   = os.getenv("LLM_MODEL", "openai/gpt-oss-120b")
         self.ollama_url  = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
         self.openai_key  = os.getenv("OPENAI_API_KEY", "")
         self._whisper_model: Any = None
