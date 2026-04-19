@@ -86,6 +86,7 @@ class LLMService:
         self.llm_model   = os.getenv("LLM_MODEL", "openai/gpt-oss-120b")
         self.ollama_url  = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
         self.openai_key  = os.getenv("OPENAI_API_KEY", "")
+        self.groq_key    = os.getenv("LLM_API_KEY", "")
         self._whisper_model: Any = None
 
     # ── Whisper STT ───────────────────────────────────────────────────────────
@@ -116,14 +117,24 @@ class LLMService:
     async def generate_workflow_json(self, text: str) -> dict:
         """
         Send transcribed text to LLM and get back a valid n8n workflow JSON.
-        Tries Ollama first, falls back to OpenAI if key is set.
+        Tries Groq first, then Ollama, falls back to OpenAI.
         """
-        raw = await self._call_ollama(text)
+        raw = ""
+        
+        # 1. Prioridad principal: Groq
+        if self.groq_key:
+            raw = await self._call_groq(text)
+            
+        # 2. Fallback local: Ollama
+        if not raw and self.ollama_url:
+            raw = await self._call_ollama(text)
+            
+        # 3. Fallback nube: OpenAI
         if not raw and self.openai_key:
             raw = await self._call_openai(text)
 
         if not raw:
-            raise ValueError("El LLM no devolvió una respuesta válida.")
+            raise ValueError("El LLM no devolvió una respuesta válida. Revisa tus API Keys o conexión.")
 
         workflow = self._parse_and_validate_json(raw)
         return workflow
@@ -170,6 +181,29 @@ class LLMService:
             print(f"[LLMService] OpenAI error: {exc}")
             return ""
 
+    async def _call_groq(self, text: str) -> str:
+        """Call Groq API (OpenAI compatible endpoint)."""
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {self.groq_key}"},
+                    json={
+                        "model": self.llm_model,
+                        "messages": [
+                            {"role": "system", "content": N8N_SYSTEM_PROMPT},
+                            {"role": "user",   "content": text},
+                        ],
+                        # Temperatura baja para asegurar que devuelva JSON estricto
+                        "temperature": 0.1, 
+                    },
+                )
+                resp.raise_for_status()
+                return resp.json()["choices"][0]["message"]["content"]
+        except Exception as exc:
+            print(f"[LLMService] Groq error: {exc}")
+            return ""
+        
     def _parse_and_validate_json(self, raw: str) -> dict:
         """Extract and validate JSON from LLM response."""
         # Strip markdown code fences if present
