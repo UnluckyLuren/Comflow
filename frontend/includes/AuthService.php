@@ -180,7 +180,14 @@ class AuthService {
         
         $jwt = $base64UrlHeader . "." . $base64UrlPayload . "." . $base64UrlSignature;
 
-        // Guardamos la cookie 'access_token' para que el navegador se la envíe a FastAPI
-        setcookie("access_token", $jwt, time() + self::SESSION_DURATION, "/", "", true, true);
+        // Guardamos la cookie 'access_token' permitiendo que JS la lea
+        setcookie("access_token", $jwt, [
+            'expires' => time() + self::SESSION_DURATION,
+            'path' => '/',
+            'domain' => '', 
+            'secure' => true,     
+            'httponly' => false,  
+            'samesite' => 'Lax'    
+        ]);
     }
 }
