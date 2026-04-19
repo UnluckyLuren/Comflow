@@ -70,7 +70,8 @@ class AuthService {
         $_SESSION['is_admin']   = (bool)$user['acceso_admin'];
         $_SESSION['expires']    = time() + self::SESSION_DURATION;
 
-        $this->setFastApiToken($user['id_usuario']);
+        // Creamos la cookie que auth_service.py está esperando
+        setcookie("cf_uid", $user['id_usuario'], time() + self::SESSION_DURATION, "/");
         $this->logEvent($user['id_usuario'], 'info', 'auth', 'Login exitoso');
 
         return ['success' => true, 'user' => $user];
@@ -163,30 +164,4 @@ class AuthService {
         } catch (Exception $e) { /* fail silently */ }
     }
 
-    // Genera un token JWT compatible con FastAPI (Pasando el ID)
-    private function setFastApiToken(int $userId): void {
-        // ESTA DEBE SER LA MISMA CLAVE DE TU .env
-        $secret = "UnaClaveSuperSecretaYEsticaParaClawFlow2026"; 
-        
-        $header = json_encode(['alg' => 'HS256', 'typ' => 'JWT']);
-        // FastAPI busca el 'sub' y lo convierte a entero (int)
-        $payload = json_encode(['sub' => (string)$userId, 'exp' => time() + self::SESSION_DURATION]);
-
-        $base64UrlHeader = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($header));
-        $base64UrlPayload = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($payload));
-        
-        $signature = hash_hmac('sha256', $base64UrlHeader . "." . $base64UrlPayload, $secret, true);
-        $base64UrlSignature = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($signature));
-        
-        $jwt = $base64UrlHeader . "." . $base64UrlPayload . "." . $base64UrlSignature;
-
-        setcookie("access_token", $jwt, [
-            'expires' => time() + self::SESSION_DURATION,
-            'path' => '/',
-            'domain' => '', 
-            'secure' => true,     
-            'httponly' => false,  // Permite que utils.js la lea
-            'samesite' => 'Lax'    
-        ]);
-    }
 }
