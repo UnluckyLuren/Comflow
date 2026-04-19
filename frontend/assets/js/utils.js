@@ -63,16 +63,44 @@ function formatDate(dateStr) {
   }).format(new Date(dateStr));
 }
 
+/**
+ * Extrae el valor de una cookie por su nombre
+ */
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(';').shift();
+  return null;
+}
+
+/**
+ * Función fetch envuelta con inyección de JWT
+ */
 async function apiFetch(url, options = {}) {
+  // 1. Obtener el token generado por PHP
+  const token = getCookie('access_token');
+
   const defaults = {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json' 
+    },
     credentials: 'include',
   };
+
+  // 2. Si existe el token, inyectarlo como cabecera Bearer para FastAPI
+  if (token) {
+    defaults.headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const merged = { ...defaults, ...options };
+  
+  // Respetar cabeceras adicionales si se enviaron en los options
   if (merged.headers && options.headers) {
     merged.headers = { ...defaults.headers, ...options.headers };
   }
+
   const res = await fetch(url, merged);
+  
   if (res.status === 401) {
     window.location.href = '/index.php?expired=1';
     return;
