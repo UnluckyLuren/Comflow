@@ -53,13 +53,13 @@ class N8NService:
 
     async def activate_workflow(self, flow_id: str) -> dict:
         async with self._client() as c:
-            r = await c.put(f"{self.base}/workflows/{flow_id}/activate")
+            r = await c.post(f"{self.base}/workflows/{flow_id}/activate")
             r.raise_for_status()
             return r.json()
 
     async def deactivate_workflow(self, flow_id: str) -> dict:
         async with self._client() as c:
-            r = await c.put(f"{self.base}/workflows/{flow_id}/deactivate")
+            r = await c.post(f"{self.base}/workflows/{flow_id}/deactivate")
             r.raise_for_status()
             return r.json()
 
