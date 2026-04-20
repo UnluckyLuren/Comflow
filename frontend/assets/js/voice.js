@@ -199,9 +199,9 @@ class VoiceController {
         return;
       }
 
-      this.generatedJson = data.workflow_json;
-      this.closeVoiceModal();
-      this._openPreviewModal(text, data);
+      this.closeVoiceModal(); // Primero cerramos y reseteamos
+      this.generatedJson = data.workflow_json; // LUEGO guardamos el JSON a salvo
+      this._openPreviewModal(text, data); // Y abrimos la vista previa
     } catch (err) {
       hideLoading();
       console.error(err);
