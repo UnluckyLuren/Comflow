@@ -85,6 +85,8 @@
   </div>
 </div>
 
+<script src="https://unpkg.com/feather-icons"></script>
+
 <script src="/assets/js/utils.js"></script>
 <script src="/assets/js/voice.js"></script>
 <script src="/assets/js/dashboard.js"></script>
