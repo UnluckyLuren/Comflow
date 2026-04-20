@@ -13,8 +13,9 @@ import httpx
 import whisper
 
 # ── N8n System Prompt ─────────────────────────────────────────────────────────
+# ── N8n System Prompt ─────────────────────────────────────────────────────────
 N8N_SYSTEM_PROMPT = """
-You are ClawFlow, an expert n8n workflow architect. Your ONLY job is to output
+You are ComFlow, an expert n8n workflow architect. Your ONLY job is to output
 a valid n8n workflow JSON object. Never explain, never apologize. Just JSON.
 
 RULES:
@@ -24,8 +25,10 @@ RULES:
    "n8n-nodes-base.gmail"), "typeVersion" (integer), "position" ([x, y] array),
    "parameters" (object).
 4. The first node must always be a trigger (Webhook, Schedule, Gmail Trigger, etc.).
-5. "connections" maps source node "id" to {"main": [[{"node": "target_id", "type": "main", "index": 0}]]}.
-6. "settings" must include: {"executionOrder": "v1"}.
+5. "settings" must include: {"executionOrder": "v1"}.
+6. CRITICAL - CONNECTIONS: "connections" maps source node "id" to {"main": [[{"node": "target_id", "type": "main", "index": 0}]]}. Pay attention to the double brackets [ [ { ... } ] ]. EVERY NODE EXCEPT THE LAST MUST BE CONNECTED. DO NOT LEAVE ANY NODE ISOLATED ON THE CANVAS.
+7. CRITICAL - SPATIAL SPACING ("position"): Nodes MUST NOT overlap. The first node starts at [200, 300]. Increase the X coordinate by 200 for every subsequent connected node in the chain (e.g., [400, 300], [600, 300], [800, 300]).
+8. CRITICAL - FUNCTIONAL PARAMETERS: Always infer and include necessary parameters so the workflow works out-of-the-box. For example: Telegram needs {"chatId": "...", "text": "..."}, HTTP Request needs {"url": "...", "method": "GET"}, Webhook needs {"httpMethod": "POST", "path": "webhook-path"}. Use logical placeholder data if the user doesn't provide specifics.
 
 COMMON NODE TYPES:
 - n8n-nodes-base.webhook (Webhook Trigger)
@@ -63,7 +66,7 @@ EXAMPLE OUTPUT:
       "name": "Save to Drive",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
-      "position": [400, 300],
+      "position": [300, 300],
       "parameters": {"operation": "upload", "folderId": "root"}
     }
   ],
@@ -182,7 +185,7 @@ class LLMService:
             return ""
 
     async def _call_groq(self, text: str) -> str:
-        """Call Groq API (OpenAI compatible endpoint)."""
+        """Call Groq API (OpenAI compatible endpoint) in Strict JSON Mode."""
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.post(
@@ -192,10 +195,10 @@ class LLMService:
                         "model": self.llm_model,
                         "messages": [
                             {"role": "system", "content": N8N_SYSTEM_PROMPT},
-                            {"role": "user",   "content": text},
+                            {"role": "user",   "content": f"Crea un flujo para: {text}. Devuelve el código en formato JSON."},
                         ],
-                        # Temperatura baja para asegurar que devuelva JSON estricto
-                        "temperature": 0.1, 
+                        "temperature": 0.0, # Temperatura 0 para lógica estricta y predecible
+                        "response_format": { "type": "json_object" } # <--- LA MAGIA DE GROQ AQUÍ
                     },
                 )
                 resp.raise_for_status()
