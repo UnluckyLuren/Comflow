@@ -185,7 +185,7 @@ class LLMService:
             return ""
 
     async def _call_groq(self, text: str) -> str:
-        """Call Groq API (OpenAI compatible endpoint) in Strict JSON Mode."""
+        """Call Groq API (OpenAI compatible endpoint)."""
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.post(
@@ -195,10 +195,10 @@ class LLMService:
                         "model": self.llm_model,
                         "messages": [
                             {"role": "system", "content": N8N_SYSTEM_PROMPT},
-                            {"role": "user",   "content": f"Crea un flujo para: {text}. Devuelve el código en formato JSON."},
+                            {"role": "user",   "content": text},
                         ],
-                        "temperature": 0.0, # Temperatura 0 para lógica estricta y predecible
-                        "response_format": { "type": "json_object" } # <--- LA MAGIA DE GROQ AQUÍ
+                        # Temperatura baja para asegurar que devuelva JSON estricto
+                        "temperature": 0.1, 
                     },
                 )
                 resp.raise_for_status()
