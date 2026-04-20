@@ -88,7 +88,7 @@
 <script src="https://unpkg.com/feather-icons"></script>
 
 <script src="/assets/js/utils.js"></script>
-<script src="/assets/js/voice.js"></script>
+<script src="/assets/js/voice.js?v=2"></script> 
 <script src="/assets/js/dashboard.js"></script>
 <script src="/assets/js/main.js"></script>
 <script>
