@@ -65,15 +65,15 @@ async def deploy_workflow(
     svc, inst = _get_n8n(db, current_user)
 
     try:
-        # POST /workflows — create
+        # 1. POST /workflows — Creamos el flujo primero
         created = await svc.create_workflow(body.workflow_json)
         flow_id = str(created.get("id", ""))
         name    = created.get("name", "Flujo sin nombre")
 
-        # PUT /workflows/{id}/activate
+        # 2. POST /workflows/{id}/activate — Lo encendemos usando el ID recién creado
         await svc.activate_workflow(flow_id)
 
-        # Persist locally
+        # 3. Guardamos localmente (aseguramos guardar el estado activo)
         nodes_summary = [
             n.get("name", n.get("type")) for n in body.workflow_json.get("nodes", [])
         ]
@@ -82,7 +82,7 @@ async def deploy_workflow(
             id_instancia=inst.id_instancia,
             id_usuario=current_user.id_usuario,
             nombre=name,
-            activo=True,
+            activo=True, # Lo guardamos como True en nuestra base de datos local
             estructura_json=json.dumps(body.workflow_json),
             nodos_resumen=nodes_summary,
         )
