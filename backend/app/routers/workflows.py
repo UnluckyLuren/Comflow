@@ -41,7 +41,7 @@ def _get_n8n(db: Session, user: Usuario) -> tuple[N8NService, InstanciaN8N]:
         inst = InstanciaN8N(
             id_usuario=user.id_usuario,
             nombre="Local n8n",
-            host_url=os.getenv("N8N_HOST", "http://n8n:5678"),
+            host_url=os.getenv("N8N_HOST", "https://n8n.curikprojects.me"),
             api_key_cifrada=enc.encrypt(os.getenv("N8N_API_KEY", "")),
         )
         db.add(inst)
