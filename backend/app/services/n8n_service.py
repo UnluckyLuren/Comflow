@@ -83,3 +83,11 @@ class N8NService:
                 return r.status_code < 500
         except Exception:
             return False
+        
+    # ── Credentials ───────────────────────────────────────────────────────────
+    async def list_credentials(self) -> list[dict]:
+        async with self._client() as c:
+            r = await c.get(f"{self.base}/credentials")
+            if r.status_code == 200:
+                return r.json().get("data", [])
+            return []

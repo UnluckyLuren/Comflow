@@ -14,6 +14,9 @@ from app.models.database import CredencialAPI, get_db, Usuario
 from app.services.auth_service import get_current_user
 from app.services.encryption_service import EncryptionService
 
+from app.models.database import InstanciaN8N
+from app.services.n8n_service import N8NService
+
 router = APIRouter()
 enc    = EncryptionService()
 
@@ -41,24 +44,52 @@ async def list_credentials(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
+    lista_creds = []
+
+    # Cargar credenciales locales (MySQL)
     creds = db.query(CredencialAPI).filter(
         CredencialAPI.id_usuario == current_user.id_usuario,
         CredencialAPI.activa == True,
     ).all()
 
-    return {
-        "credentials": [
-            {
-                "id_credencial":   c.id_credencial,
-                "nombre_app":      c.nombre_app,
-                "tipo":            c.tipo,
-                "estado_conexion": c.estado_conexion,
-                "ultima_validacion": c.ultima_validacion.isoformat() if c.ultima_validacion else None,
-                "updated_at":      c.updated_at.isoformat() if c.updated_at else None,
-            }
-            for c in creds
-        ]
-    }
+    for c in creds:
+        ultima_val = getattr(c, "ultima_validacion", None)
+        actualizado = getattr(c, "updated_at", ultima_val) 
+
+        lista_creds.append({
+            "id_credencial":   c.id_credencial,
+            "nombre_app":      c.nombre_app,
+            "tipo":            c.tipo,
+            "estado_conexion": c.estado_conexion,
+            "ultima_validacion": ultima_val.isoformat() if ultima_val else None,
+            "updated_at":      actualizado.isoformat() if actualizado else None,
+        })
+
+    # Cargar credenciales remotas (n8n)
+    try:
+        inst = db.query(InstanciaN8N).filter(
+            InstanciaN8N.id_usuario == current_user.id_usuario,
+            InstanciaN8N.activa == True,
+        ).first()
+
+        if inst:
+            api_key = enc.decrypt(inst.api_key_cifrada) if inst.api_key_cifrada else ""
+            svc = N8NService(host=inst.host_url, api_key=api_key)
+            n8n_creds = await svc.list_credentials()
+
+            for nc in n8n_creds:
+                lista_creds.append({
+                    "id_credencial":   nc.get("id"),
+                    "nombre_app":      f"{nc.get('name')} (n8n)", # Le añadimos la etiqueta
+                    "tipo":            nc.get("type"),
+                    "estado_conexion": "valida", # Si están en n8n, asumimos que son válidas
+                    "ultima_validacion": nc.get("updatedAt"),
+                    "updated_at":      nc.get("updatedAt"),
+                })
+    except Exception as exc:
+        print(f"[Credentials] Error sincronizando n8n: {exc}")
+
+    return {"credentials": lista_creds}
 
 
 # ── UC08: Add / Validate Credential ───────────────────────────────────────────
