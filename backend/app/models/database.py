@@ -116,7 +116,8 @@ class CredencialAPI(Base):
     nombre_app        = Column(String(100), nullable=False)
     tipo              = Column(Enum("oauth2","api_key","basic","token"), default="api_key")
     token_cifrado     = Column(Text, nullable=False)
-    metadata_json     = Column(JSON, nullable=True)
+    # Le pasamos "metadata" como primer parámetro para mapear el nombre real de MySQL
+    metadata_json     = Column("metadata", JSON, nullable=True)
     activa            = Column(Boolean, default=True)
     ultima_validacion = Column(DateTime, nullable=True)
     estado_conexion   = Column(Enum("valida","invalida","sin_probar"), default="sin_probar")
