@@ -91,3 +91,22 @@ class N8NService:
             if r.status_code == 200:
                 return r.json().get("data", [])
             return []
+        
+# ── Credentials ───────────────────────────────────────────────────────────
+    async def list_credentials(self) -> list[dict]:
+        async with self._client() as c:
+            r = await c.get(f"{self.base}/credentials")
+            return r.json().get("data", []) if r.status_code == 200 else []
+
+    async def create_credential(self, name: str, type_name: str, data: dict) -> dict:
+        """Crea una credencial directamente en el servidor de n8n"""
+        async with self._client() as c:
+            # n8n espera un formato específico: { name, type, data: { ... } }
+            payload = {
+                "name": name,
+                "type": type_name,
+                "data": data 
+            }
+            r = await c.post(f"{self.base}/credentials", json=payload)
+            r.raise_for_status()
+            return r.json()
