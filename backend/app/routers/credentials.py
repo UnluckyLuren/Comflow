@@ -17,26 +17,28 @@ router = APIRouter()
 enc    = EncryptionService()
 
 class AddCredentialRequest(BaseModel):
-    servicio_base: str   # <-- NUEVO: Ej. "Telegram", "GitHub"
-    nombre_app: str      # <-- EL ALIAS: Ej. "Bot Ventas", "GitHub Personal"
-    tipo:       str = "api_key"
-    token:      str
+    servicio_base: str
     nombre_app: str
     tipo:       str = "api_key"
     token:      str
 
-# --- NUEVA FUNCIÓN INDEPENDIENTE (Evita el ImportError y protege cuentas nuevas) ---
+# --- NUEVA FUNCIÓN INDEPENDIENTE (Con escudo anti-crash) ---
 def _get_n8n_service(db: Session, user: Usuario) -> N8NService:
     inst = db.query(InstanciaN8N).filter(
         InstanciaN8N.id_usuario == user.id_usuario,
         InstanciaN8N.activa == True
     ).first()
 
-    # Fallback inteligente: Si es cuenta nueva, usa las variables por defecto del .env
     host_url = inst.host_url if inst else os.getenv("N8N_HOST", "https://n8n.curikprojects.me")
-    api_key = enc.decrypt(inst.api_key_cifrada) if inst and inst.api_key_cifrada else os.getenv("N8N_API_KEY", "")
+    
+    # Si la llave en la BD se corrompió, no explota (500), usa la del .env
+    try:
+        api_key = enc.decrypt(inst.api_key_cifrada) if inst and inst.api_key_cifrada else os.getenv("N8N_API_KEY", "")
+    except Exception:
+        api_key = os.getenv("N8N_API_KEY", "")
 
     return N8NService(host=host_url, api_key=api_key)
+
 # ---------------------------------------------------------------------------------
 
 # ── UC08: List Credentials ─────────────────────────────────────────────────────

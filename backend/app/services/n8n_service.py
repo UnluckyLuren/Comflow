@@ -111,17 +111,20 @@ class N8NService:
             if cred.get("name") == name:
                 return cred
         return None
-
+    
     # ── Health ────────────────────────────────────────────────────────────────
     async def ping(self) -> bool:
         """Returns True if n8n responds."""
         try:
-            async with self._client(timeout=6.0) as c:
-                r = await c.get(f"{self.base}/workflows", params={"limit": 1})
+            # CORRECCIÓN: Usar self._client() sin parámetros extra
+            async with self._client() as c:
+                # Aquí sí podemos definir el timeout interno de la petición
+                r = await c.get(f"{self.base}/workflows", params={"limit": 1}, timeout=6.0)
                 return r.status_code < 500
-        except Exception:
+        except Exception as e:
+            # Imprimir en consola si de verdad hay un problema de red
+            print(f"❌ [Ping n8n] Error de conexión: {e}")
             return False
-
 
 # ── Factory: user-aware N8NService ────────────────────────────────────────────
 async def get_n8n_for_user(db, user_id: int) -> N8NService:
