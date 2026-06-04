@@ -43,18 +43,13 @@ services:
     restart: always
     environment:
       - DATABASE_URL=mysql+pymysql://clawflow:clawflow_pass@mysql:3306/clawflow
-      - SECRET_KEY=clawflow_super_secret_key_change_in_production
-      - N8N_HOST=http://n8n:5678
+      - SECRET_KEY=comflow_secret
+      - N8N_HOST=https://n8n.curikprojects.me
       - N8N_API_KEY=${N8N_API_KEY:-}
       - GROQ_API_KEY=${GROQ_API_KEY:-}
-      - GROQ_MODEL=${GROQ_MODEL:-llama-3.3-70b-versatile}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - LLM_MODEL=${LLM_MODEL:-llama3:8b}
       - N8N_HOST=${N8N_HOST}
-      - N8N_API_KEY=${N8N_API_KEY:-}
-      - LLM_API_KEY=${LLM_API_KEY}
       - LLM_MODEL=${LLM_MODEL:-openai/gpt-oss-120b}
-      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
       - ENCRYPTION_KEY=clawflow_enc_key_32_chars_exactly
     volumes:
       - ./backend:/app
@@ -84,7 +79,8 @@ services:
       retries: 5
     networks:
       - clawflow_net
-      n8n:
+
+  n8n:
     image: n8nio/n8n:latest
     container_name: clawflow_n8n
     restart: always
@@ -99,23 +95,6 @@ services:
       - n8n_data:/home/node/.n8n
     networks:
       - clawflow_net
-
- # ── n8n Automation Engine ─────────────────────────────────────────
- #  n8n:
- #   image: n8nio/n8n:latest
- #  container_name: clawflow_n8n
- #   restart: always
- #   environment:
- #     - N8N_HOST=0.0.0.0
- #     - N8N_PORT=5678
- #     - N8N_PROTOCOL=http
- #     - N8N_API_KEY=${N8N_API_KEY:-your_n8n_api_key_here}
- #     - GENERIC_TIMEZONE=America/Mexico_City
- #     - N8N_LOG_LEVEL=info
- #   volumes:
- #     - n8n_data:/home/node/.n8n
- #   networks:
- #     - clawflow_net
 
 networks:
   clawflow_net:

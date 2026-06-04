@@ -14,20 +14,25 @@ N8N_API_KEY = os.getenv("N8N_API_KEY", "")
 
 class N8NService:
     """
-    Wraps the n8n REST API v1.
-    All methods are async; raise httpx.HTTPStatusError on HTTP errors.
+    Wraps the n8n REST API.
+    All methods are async and raise httpx.HTTPError on failure.
     """
 
-    def __init__(self, host: str = N8N_HOST, api_key: str = N8N_API_KEY) -> None:
-        self.base    = host.rstrip("/") + "/api/v1"
+    def __init__(
+        self,
+        host: str = N8N_HOST,
+        api_key: str = N8N_API_KEY,
+    ) -> None:
+        self.base = host.rstrip("/") + "/api/v1"
+        # Agregamos el User-Agent para evitar bloqueos de Cloudflare
         self.headers = {
             "X-N8N-API-KEY": api_key,
-            "Content-Type":  "application/json",
-            "Accept":        "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ClawFlow/1.0",
         }
 
-    def _client(self, timeout: float = 30.0) -> httpx.AsyncClient:
-        return httpx.AsyncClient(headers=self.headers, timeout=timeout)
+    def _client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(headers=self.headers, timeout=30.0)
 
     # ── Workflows ─────────────────────────────────────────────────────────────
     async def list_workflows(self) -> list[dict]:
@@ -76,10 +81,14 @@ class N8NService:
         """List all credentials stored in this n8n instance."""
         async with self._client() as c:
             r = await c.get(f"{self.base}/credentials")
+
+            if r.status_code >= 400:
+                print(f"❌ ERROR N8N: {r.text}") 
             r.raise_for_status()
             data = r.json()
             # n8n returns {"data": [...]} or directly a list
             return data.get("data", data) if isinstance(data, dict) else data
+            
 
     async def create_n8n_credential(
         self, name: str, n8n_type: str, data: dict[str, Any]

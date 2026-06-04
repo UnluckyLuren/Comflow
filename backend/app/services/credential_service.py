@@ -198,7 +198,8 @@ class CredentialService:
         # Build index: n8n_type → list of stored creds
         cred_index: dict[str, list] = {}
         for cred in stored:
-            info = CREDENTIAL_CATALOG.get(cred.nombre_app)
+            base_service = cred.metadata_json.get("app_service") if cred.metadata_json else cred.nombre_app
+            info = CREDENTIAL_CATALOG.get(base_service)
             if info:
                 n8n_type = info["n8n_type"]
                 cred_index.setdefault(n8n_type, []).append(cred)
@@ -310,7 +311,8 @@ class CredentialService:
 
         # Build existing n8n credentials index
         try:
-            n8n_creds = await n8n_svc.list_n8n_credentials()
+            # CORRECCIÓN 1: El método correcto es list_credentials
+            n8n_creds = await n8n_svc.list_credentials()
             n8n_by_name = {c.get("name", ""): c for c in n8n_creds}
         except Exception:
             n8n_by_name = {}
@@ -327,12 +329,11 @@ class CredentialService:
             manual_name  = sel.get("manual_name")
 
             if mode == "manual_name" and manual_name:
-                # User said they already have it in n8n under a specific name
                 existing = n8n_by_name.get(manual_name)
                 if existing:
                     id_map[placeholder] = str(existing.get("id", manual_name))
                 else:
-                    id_map[placeholder] = manual_name  # hope it exists
+                    id_map[placeholder] = manual_name  
                 continue
 
             if mode == "use_stored" and db_cred_id:
@@ -342,14 +343,15 @@ class CredentialService:
                 if not stored:
                     continue
 
-                # Check if n8n already has a credential with this name
                 existing = n8n_by_name.get(cred_name)
                 if existing:
                     id_map[placeholder] = str(existing.get("id", cred_name))
                     continue
 
-                # Try to auto-create in n8n (only for API-key types)
-                catalog = CREDENTIAL_CATALOG.get(stored.nombre_app, {})
+                # CORRECCIÓN 2: Leer el servicio base desde metadata (Soporte de Alias)
+                base_app = stored.metadata_json.get("app_service") if stored.metadata_json else stored.nombre_app
+                catalog = CREDENTIAL_CATALOG.get(base_app, {})
+                
                 if catalog.get("is_auto_creatable"):
                     try:
                         token = enc.decrypt(stored.token_cifrado)
@@ -357,20 +359,21 @@ class CredentialService:
                         cred_data = {
                             k: v.replace("{token}", token) for k, v in data_fmt.items()
                         }
-                        created = await n8n_svc.create_n8n_credential(
-                            name=cred_name, n8n_type=cred_type, data=cred_data
+                        # CORRECCIÓN 3: Método create_credential y el parámetro type_name
+                        created = await n8n_svc.create_credential(
+                            name=cred_name, type_name=cred_type, data=cred_data
                         )
                         id_map[placeholder] = str(created.get("id", cred_name))
                     except Exception as exc:
-                        print(f"[CredService] Could not create n8n credential: {exc}")
-                        id_map[placeholder] = cred_name  # use name as fallback
+                        print(f"[CredService] Error subiendo a n8n: {exc}")
+                        id_map[placeholder] = cred_name  
 
         # Patch workflow JSON: replace all placeholders
         wf_str = json.dumps(workflow_json)
         for placeholder, real_id in id_map.items():
             wf_str = wf_str.replace(placeholder, real_id)
         return json.loads(wf_str)
-
+    
     # ── 4. Get guidance for a specific credential type ─────────────────────
     @staticmethod
     def get_guidance(n8n_type: str) -> dict:

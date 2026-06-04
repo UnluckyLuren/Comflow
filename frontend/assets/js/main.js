@@ -314,9 +314,10 @@ class CredentialsController {
       const res = await apiFetch('/api/credentials/add', {
         method: 'POST',
         body: JSON.stringify({
-          nombre_app: document.getElementById('credApp').value,
-          tipo: document.getElementById('credType').value,
-          token: document.getElementById('credToken').value,
+            servicio_base: document.getElementById('credAppBase').value,
+            nombre_app: document.getElementById('credAlias').value, // Este es el alias único
+            tipo: document.getElementById('credType').value,
+            token: document.getElementById('credToken').value,
         }),
       });
       const data = await res.json();

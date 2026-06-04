@@ -31,9 +31,9 @@ require_once __DIR__ . '/includes/header.php';
 
     <form id="credSaveForm">
       <div class="form-group">
-        <label class="form-label">Aplicación destino</label>
-        <select class="form-control" id="credApp" name="nombre_app" required>
-          <option value="">Selecciona una aplicación...</option>
+        <label class="form-label">Aplicación o Servicio</label>
+        <select class="form-control" id="credAppBase" required>
+          <option value="">Selecciona un servicio...</option>
           <option value="Gmail_OAuth">Gmail (OAuth2)</option>
           <option value="Google_Drive">Google Drive</option>
           <option value="Google_Sheets">Google Sheets</option>
@@ -46,9 +46,11 @@ require_once __DIR__ . '/includes/header.php';
           <option value="Custom">Personalizado...</option>
         </select>
       </div>
-      <div class="form-group" id="customAppGroup" style="display:none">
-        <label class="form-label">Nombre de la aplicación</label>
-        <input type="text" class="form-control" id="customAppName" placeholder="Mi Servicio Personalizado">
+
+      <div class="form-group">
+        <label class="form-label">Nombre Identificador (Alias)</label>
+        <input type="text" class="form-control" id="credAlias" placeholder="Ej. Bot de Ventas, GitHub Personal" required>
+        <small class="text-muted" style="font-size: 11px;">Este nombre debe ser único para no pisar otras llaves.</small>
       </div>
       <div class="form-group">
         <label class="form-label">Tipo de credencial</label>

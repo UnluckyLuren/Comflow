@@ -17,6 +17,10 @@ router = APIRouter()
 enc    = EncryptionService()
 
 class AddCredentialRequest(BaseModel):
+    servicio_base: str   # <-- NUEVO: Ej. "Telegram", "GitHub"
+    nombre_app: str      # <-- EL ALIAS: Ej. "Bot Ventas", "GitHub Personal"
+    tipo:       str = "api_key"
+    token:      str
     nombre_app: str
     tipo:       str = "api_key"
     token:      str
@@ -82,10 +86,8 @@ async def add_credential(
     db: Session = Depends(get_db), 
     current_user: Usuario = Depends(get_current_user)
 ):
-    # Usar la nueva función local
     svc = _get_n8n_service(db, current_user)
     
-    # Diccionario de Traducción para n8n
     n8n_payloads = {
         "Telegram":      {"type": "telegramApi",       "data": {"accessToken": body.token}},
         "Discord":       {"type": "discordWebhookApi", "data": {"webhookUri": body.token}},
@@ -96,7 +98,8 @@ async def add_credential(
         "Google_Sheets": {"type": "googleApi",         "data": {"accessToken": body.token}}, 
     }
 
-    app_key = body.nombre_app
+    # Leemos el servicio base para saber cómo formatear para n8n
+    app_key = body.servicio_base
     if app_key in n8n_payloads:
         n8n_type = n8n_payloads[app_key]["type"]
         n8n_data = n8n_payloads[app_key]["data"]
@@ -106,26 +109,43 @@ async def add_credential(
 
     conexion_n8n_exitosa = False
     try:
+        # Enviamos a n8n el ALIAS único (body.nombre_app) para que no haya choques
         await svc.create_credential(body.nombre_app, n8n_type, n8n_data)
         conexion_n8n_exitosa = True
     except Exception as e:
         print(f"[Credentials] Error subiendo a n8n el tipo {n8n_type}: {e}")
 
     encrypted = enc.encrypt(body.token)
-    db.add(CredencialAPI(
-        id_usuario=current_user.id_usuario,
-        nombre_app=body.nombre_app,
-        tipo=body.tipo,
-        token_cifrado=encrypted,
-        estado_conexion="valida" if conexion_n8n_exitosa else "invalida" 
-    ))
+    estado = "valida" if conexion_n8n_exitosa else "invalida"
+    
+    # Creamos un JSON con el servicio real para esconderlo en la BD
+    metadata_dict = {"app_service": body.servicio_base}
+
+    existing = db.query(CredencialAPI).filter(
+        CredencialAPI.id_usuario == current_user.id_usuario,
+        CredencialAPI.nombre_app == body.nombre_app # Upsert basado en el Alias
+    ).first()
+
+    if existing:
+        existing.token_cifrado = encrypted
+        existing.tipo = body.tipo
+        existing.estado_conexion = estado
+        existing.metadata_json = metadata_dict
+        existing.activa = True
+    else:
+        db.add(CredencialAPI(
+            id_usuario=current_user.id_usuario,
+            nombre_app=body.nombre_app,
+            tipo=body.tipo,
+            token_cifrado=encrypted,
+            metadata_json=metadata_dict,
+            estado_conexion=estado 
+        ))
+        
     db.commit()
     
     if not conexion_n8n_exitosa:
-        raise HTTPException(
-            status_code=400, 
-            detail="Se guardó localmente, pero n8n rechazó el formato."
-        )
+        raise HTTPException(status_code=400, detail="n8n rechazó el formato.")
 
     return {"success": True}
 
