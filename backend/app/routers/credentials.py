@@ -1,20 +1,16 @@
-"""
-ClawFlow — Credentials Router
-UC08: Administrar Llaves de Acceso a Aplicaciones
-"""
+
 from __future__ import annotations
 from datetime import datetime
+import os
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.models.database import CredencialAPI, get_db, Usuario
+from app.models.database import CredencialAPI, get_db, Usuario, InstanciaN8N
 from app.services.auth_service import get_current_user
 from app.services.encryption_service import EncryptionService
-
-from app.routers.workflows import _get_n8n
 from app.services.n8n_service import N8NService
 
 router = APIRouter()
@@ -25,6 +21,20 @@ class AddCredentialRequest(BaseModel):
     tipo:       str = "api_key"
     token:      str
 
+# --- NUEVA FUNCIÓN INDEPENDIENTE (Evita el ImportError y protege cuentas nuevas) ---
+def _get_n8n_service(db: Session, user: Usuario) -> N8NService:
+    inst = db.query(InstanciaN8N).filter(
+        InstanciaN8N.id_usuario == user.id_usuario,
+        InstanciaN8N.activa == True
+    ).first()
+
+    # Fallback inteligente: Si es cuenta nueva, usa las variables por defecto del .env
+    host_url = inst.host_url if inst else os.getenv("N8N_HOST", "https://n8n.curikprojects.me")
+    api_key = enc.decrypt(inst.api_key_cifrada) if inst and inst.api_key_cifrada else os.getenv("N8N_API_KEY", "")
+
+    return N8NService(host=host_url, api_key=api_key)
+# ---------------------------------------------------------------------------------
+
 # ── UC08: List Credentials ─────────────────────────────────────────────────────
 @router.get("/list")
 async def list_credentials(db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_user)):
@@ -34,8 +44,8 @@ async def list_credentials(db: Session = Depends(get_db), current_user: Usuario 
         CredencialAPI.activa == True
     ).all()
     
-    # Obtener de n8n para fusionar
-    svc, _ = _get_n8n(db, current_user)
+    # Usar la nueva función local
+    svc = _get_n8n_service(db, current_user)
     
     lista_final = []
     
@@ -66,14 +76,14 @@ async def list_credentials(db: Session = Depends(get_db), current_user: Usuario 
     return {"credentials": lista_final}
 
 # ── UC08: Add / Validate Credential ───────────────────────────────────────────
-
 @router.post("/add")
 async def add_credential(
     body: AddCredentialRequest, 
     db: Session = Depends(get_db), 
     current_user: Usuario = Depends(get_current_user)
 ):
-    svc, _ = _get_n8n(db, current_user)
+    # Usar la nueva función local
+    svc = _get_n8n_service(db, current_user)
     
     # Diccionario de Traducción para n8n
     n8n_payloads = {
