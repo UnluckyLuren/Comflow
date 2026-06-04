@@ -103,9 +103,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <button type="submit" class="btn btn-primary full-width" style="justify-content:center;margin-top:8px">
         Iniciar Sesión
       </button>
-      <p style="text-align:center;margin-top:16px;font-size:12px;color:var(--text-muted)">
-        Usuario demo: <span style="color:var(--accent)">admin@clawflow.local</span> / <span style="color:var(--accent)">Admin@ClawFlow2026</span>
-      </p>
     </form>
 
     <!-- Register Form -->

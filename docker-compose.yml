@@ -1,7 +1,6 @@
 version: '3.9'
 
 services:
-  # ── Nginx + PHP Frontend ──────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
@@ -34,7 +33,6 @@ services:
     networks:
       - clawflow_net
 
-  # ── FastAPI Backend ───────────────────────────────────────────────
   backend:
     build:
       context: ./backend
@@ -46,9 +44,15 @@ services:
       - SECRET_KEY=clawflow_super_secret_key_change_in_production
       - N8N_HOST=http://n8n:5678
       - N8N_API_KEY=${N8N_API_KEY:-your_n8n_api_key_here}
+      # ── Groq (LLM principal) ────────────────────────────────────
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GROQ_MODEL=${GROQ_MODEL:-llama-3.3-70b-versatile}
+      # ── OpenAI (fallback opcional) ──────────────────────────────
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # ── Ollama (fallback local) ─────────────────────────────────
       - LLM_MODEL=${LLM_MODEL:-llama3:8b}
       - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      # ── Seguridad ───────────────────────────────────────────────
       - ENCRYPTION_KEY=clawflow_enc_key_32_chars_exactly
     volumes:
       - ./backend:/app
@@ -59,7 +63,6 @@ services:
     networks:
       - clawflow_net
 
-  # ── MySQL Database ────────────────────────────────────────────────
   mysql:
     image: mysql:8.0
     container_name: clawflow_mysql
@@ -80,7 +83,6 @@ services:
     networks:
       - clawflow_net
 
-  # ── n8n Automation Engine ─────────────────────────────────────────
   n8n:
     image: n8nio/n8n:latest
     container_name: clawflow_n8n
