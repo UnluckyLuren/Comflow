@@ -17,10 +17,10 @@ router = APIRouter()
 enc    = EncryptionService()
 
 class AddCredentialRequest(BaseModel):
-    servicio_base: str
+    servicio_base: str | None = None  # Lo hacemos opcional en el schema para que no truene
     nombre_app: str
     tipo:       str = "api_key"
-    token:      str
+    token: str
 
 # --- NUEVA FUNCIÓN INDEPENDIENTE (Con escudo anti-crash) ---
 def _get_n8n_service(db: Session, user: Usuario) -> N8NService:
@@ -100,8 +100,9 @@ async def add_credential(
         "Google_Sheets": {"type": "googleApi",         "data": {"accessToken": body.token}}, 
     }
 
-    # Leemos el servicio base para saber cómo formatear para n8n
-    app_key = body.servicio_base
+    # SALVAGUARDA: Si el frontend no mandó servicio_base, usamos el nombre_app como fallback
+    app_key = body.servicio_base if body.servicio_base else body.nombre_app
+    
     if app_key in n8n_payloads:
         n8n_type = n8n_payloads[app_key]["type"]
         n8n_data = n8n_payloads[app_key]["data"]
@@ -121,7 +122,7 @@ async def add_credential(
     estado = "valida" if conexion_n8n_exitosa else "invalida"
     
     # Creamos un JSON con el servicio real para esconderlo en la BD
-    metadata_dict = {"app_service": body.servicio_base}
+    metadata_dict = {"app_service": app_key}
 
     existing = db.query(CredencialAPI).filter(
         CredencialAPI.id_usuario == current_user.id_usuario,
@@ -147,7 +148,7 @@ async def add_credential(
     db.commit()
     
     if not conexion_n8n_exitosa:
-        raise HTTPException(status_code=400, detail="n8n rechazó el formato.")
+        raise HTTPException(status_code=400, detail="Se guardó localmente, pero n8n rechazó el formato.")
 
     return {"success": True}
 

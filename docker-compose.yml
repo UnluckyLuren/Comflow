@@ -44,12 +44,12 @@ services:
     environment:
       - DATABASE_URL=mysql+pymysql://clawflow:clawflow_pass@mysql:3306/clawflow
       - SECRET_KEY=comflow_secret
-      - N8N_HOST=https://n8n.curikprojects.me
       - N8N_API_KEY=${N8N_API_KEY:-}
-      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - LLMAPIKEY=${LLM_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - N8N_HOST=${N8N_HOST}
       - LLM_MODEL=${LLM_MODEL:-openai/gpt-oss-120b}
+      - LLM_BASE_URL=https://api.groq.com/openai
       - ENCRYPTION_KEY=clawflow_enc_key_32_chars_exactly
     volumes:
       - ./backend:/app

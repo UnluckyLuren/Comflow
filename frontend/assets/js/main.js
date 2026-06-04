@@ -311,24 +311,37 @@ class CredentialsController {
     const form = document.getElementById('credSaveForm');
     showLoading('Validando y guardando...');
     try {
+      // Si los nuevos IDs de alias no existen en el HTML, 
+      // extraemos de forma segura los nombres clásicos para evitar romper la app.
+      const elAppBase = document.getElementById('credAppBase');
+      const elAlias   = document.getElementById('credAlias');
+      const elNombre  = document.getElementById('credNombreApp'); // ID antiguo de respaldo
+
+      const servicioBase = elAppBase ? elAppBase.value : (elNombre ? elNombre.value : '');
+      const nombreApp    = elAlias ? elAlias.value : (elNombre ? elNombre.value : '');
+      const tipoCred     = document.getElementById('credType') ? document.getElementById('credType').value : 'api_key';
+      const tokenCred    = document.getElementById('credToken') ? document.getElementById('credToken').value : '';
+
       const res = await apiFetch('/api/credentials/add', {
         method: 'POST',
         body: JSON.stringify({
-            servicio_base: document.getElementById('credAppBase').value,
-            nombre_app: document.getElementById('credAlias').value, // Este es el alias único
-            tipo: document.getElementById('credType').value,
-            token: document.getElementById('credToken').value,
+            servicio_base: servicioBase,
+            nombre_app: nombreApp, 
+            tipo: tipoCred,
+            token: tokenCred,
         }),
       });
+      
       const data = await res.json();
       hideLoading();
       if (!res.ok) { showToast(data.detail || 'Error', 'error'); return; }
       showToast('Credencial guardada y validada', 'success');
       document.getElementById('credModal')?.classList.remove('open');
       this.load();
-    } catch {
+    } catch (err) {
+      console.error("Error en save_credentials:", err);
       hideLoading();
-      showToast('Error de conexión', 'error');
+      showToast('Error de conexión o datos inválidos', 'error');
     }
   }
 
