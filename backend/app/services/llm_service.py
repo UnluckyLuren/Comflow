@@ -14,15 +14,9 @@ from typing import Any
 
 import httpx
 
-# ── Groq client (lazy import to avoid crash if not installed) ─────────────────
-try:
-    from groq import AsyncGroq
-    _GROQ_AVAILABLE = True
-except ImportError:
-    _GROQ_AVAILABLE = False
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL   = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_API_KEY = os.getenv("LLMAPIKEY", "")
+GROQ_MODEL   = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
 
 # ── n8n Workflow System Prompt ────────────────────────────────────────────────
 _N8N_SYSTEM = """
