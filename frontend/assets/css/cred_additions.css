@@ -1,0 +1,234 @@
+/* ═══════════════════════════════════════════════════════════
+   ClawFlow — CSS additions for Credential Selection Modal (v2)
+   Append this to the bottom of style.css
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Credential Selection Modal ───────────────────────────── */
+.cred-modal {
+  padding: 0;
+  max-width: 680px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.cred-modal-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 24px 28px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cred-modal-icon {
+  width: 42px; height: 42px;
+  border-radius: var(--radius);
+  background: var(--accent-dim);
+  border: 1px solid rgba(0,229,255,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.cred-modal-icon svg { width: 20px; height: 20px; color: var(--accent); }
+
+.cred-modal-header h2 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.cred-modal-header p { color: var(--text-secondary); font-size: 13px; }
+
+/* Slots container */
+.cred-slots-container {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+
+/* Individual slot */
+.cred-slot {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: var(--transition);
+}
+
+.cred-slot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cred-slot-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cred-slot-label {
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-display);
+}
+
+.cred-slot-node {
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.cred-slot-body {
+  padding: 14px 16px;
+}
+
+/* Auto-badge for found creds */
+.cred-auto-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  background: var(--green-dim);
+  border: 1px solid rgba(0,230,118,0.25);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+}
+
+/* Radio group for multiple creds */
+.cred-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cred-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 13px;
+  transition: var(--transition);
+}
+.cred-radio-label:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-bright);
+}
+.cred-radio-label input[type="radio"] {
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+/* Not-found option tabs */
+.cred-not-found-info { display: flex; flex-direction: column; gap: 10px; }
+
+.cred-option-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.cred-opt-btn {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--border-bright);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  transition: var(--transition);
+}
+.cred-opt-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.cred-opt-btn.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: rgba(0,229,255,0.4);
+}
+
+/* Option panels */
+.cred-opt-panel { animation: fadeIn 0.2s ease; }
+
+/* Guidance box */
+.cred-guidance-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.cred-guidance-list {
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.cred-guidance-list li { color: var(--text-secondary); }
+.cred-guidance-list li b { color: var(--text-primary); }
+.cred-guidance-list li code {
+  background: var(--bg-elevated);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+}
+
+/* Modal footer */
+.cred-modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cred-modal-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--amber-dim);
+  border: 1px solid rgba(255,179,0,0.2);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.cred-modal-hint svg { width: 14px; height: 14px; color: var(--amber); flex-shrink: 0; margin-top: 1px; }
+
+.cred-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* Manual cred input (hidden by default, shown by JS) */
+.cred-manual-input { margin-top: 6px; }
+
+/* ── Infrastructure page: n8n config status indicator ─────── */
+.config-status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+.config-status-row svg { width: 15px; height: 15px; }

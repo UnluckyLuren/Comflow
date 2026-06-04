@@ -1,6 +1,9 @@
 """
-ClawFlow — LLM Service
-Handles Speech-to-Text (Whisper) and n8n JSON generation (LLM).
+ClawFlow — LLM Service  (v2 — Groq primary, OpenAI/Ollama fallback)
+Handles:
+  • Speech-to-Text via OpenAI Whisper (local)
+  • Credential-need analysis via Groq (fast structured JSON)
+  • Workflow JSON generation via Groq with injected credential context
 """
 from __future__ import annotations
 import json
@@ -10,237 +13,277 @@ import tempfile
 from typing import Any
 
 import httpx
-import whisper
 
-# ── N8n System Prompt ─────────────────────────────────────────────────────────
-# ── N8n System Prompt ─────────────────────────────────────────────────────────
-N8N_SYSTEM_PROMPT = """
-You are ComFlow, an expert n8n workflow architect. Your ONLY job is to output
-a valid n8n workflow JSON object. Never explain, never apologize. Just JSON.
+# ── Groq client (lazy import to avoid crash if not installed) ─────────────────
+try:
+    from groq import AsyncGroq
+    _GROQ_AVAILABLE = True
+except ImportError:
+    _GROQ_AVAILABLE = False
 
-RULES:
-1. Output ONLY a raw JSON object. No markdown, no code fences, no extra text.
-2. The JSON must have these top-level keys: "name", "nodes", "connections", "settings".
-3. Every node must have: "id" (unique string), "name", "type" (full n8n node type like
-   "n8n-nodes-base.gmail"), "typeVersion" (integer), "position" ([x, y] array),
-   "parameters" (object).
-4. The first node must always be a trigger (Webhook, Schedule, Gmail Trigger, etc.).
-5. "settings" must include: {"executionOrder": "v1"}.
-6. CRITICAL - CONNECTIONS: "connections" maps source node "id" to {"main": [[{"node": "target_id", "type": "main", "index": 0}]]}. Pay attention to the double brackets [ [ { ... } ] ]. EVERY NODE EXCEPT THE LAST MUST BE CONNECTED. DO NOT LEAVE ANY NODE ISOLATED ON THE CANVAS.
-7. CRITICAL - SPATIAL SPACING ("position"): Nodes MUST NOT overlap. The first node starts at [200, 300]. Increase the X coordinate by 200 for every subsequent connected node in the chain (e.g., [400, 300], [600, 300], [800, 300]).
-8. CRITICAL - FUNCTIONAL PARAMETERS: Always infer and include necessary parameters so the workflow works out-of-the-box. For example: Telegram needs {"chatId": "...", "text": "..."}, HTTP Request needs {"url": "...", "method": "GET"}, Webhook needs {"httpMethod": "POST", "path": "webhook-path"}. Use logical placeholder data if the user doesn't provide specifics.
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL   = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
-COMMON NODE TYPES:
-- n8n-nodes-base.webhook (Webhook Trigger)
-- n8n-nodes-base.gmail (Gmail)
-- n8n-nodes-base.googleDrive (Google Drive)
-- n8n-nodes-base.googleSheets (Google Sheets)
-- n8n-nodes-base.slack (Slack)
-- n8n-nodes-base.httpRequest (HTTP Request)
-- n8n-nodes-base.set (Set Variables)
-- n8n-nodes-base.if (Conditional)
-- n8n-nodes-base.scheduleTrigger (Schedule Trigger)
-- n8n-nodes-base.postgres (PostgreSQL)
-- n8n-nodes-base.mysql (MySQL)
-- n8n-nodes-base.telegram (Telegram)
-- n8n-nodes-base.code (Code/JavaScript)
-- n8n-nodes-base.emailSend (Send Email SMTP)
-- n8n-nodes-base.github (GitHub)
-- n8n-nodes-base.notion (Notion)
-- n8n-nodes-base.airtable (Airtable)
+# ── n8n Workflow System Prompt ────────────────────────────────────────────────
+_N8N_SYSTEM = """
+Eres ClawFlow, un arquitecto experto en flujos de trabajo n8n.
+Tu ÚNICA función es generar un objeto JSON de flujo de trabajo n8n válido.
+Nunca expliques ni comentes. Solo JSON puro.
 
-EXAMPLE OUTPUT:
-{
-  "name": "Gmail to Drive Backup",
-  "nodes": [
-    {
-      "id": "node_1",
-      "name": "Gmail Trigger",
-      "type": "n8n-nodes-base.gmail",
-      "typeVersion": 2,
-      "position": [100, 300],
-      "parameters": {"operation": "getAll", "filters": {}}
-    },
-    {
-      "id": "node_2",
-      "name": "Save to Drive",
-      "type": "n8n-nodes-base.googleDrive",
-      "typeVersion": 3,
-      "position": [300, 300],
-      "parameters": {"operation": "upload", "folderId": "root"}
-    }
-  ],
-  "connections": {
-    "node_1": {"main": [[{"node": "node_2", "type": "main", "index": 0}]]}
-  },
-  "settings": {"executionOrder": "v1"}
-}
+REGLAS OBLIGATORIAS:
+1. Responde ÚNICAMENTE con un objeto JSON crudo. Sin markdown, sin bloques de código, sin texto extra.
+2. El JSON debe tener: "name", "nodes", "connections", "settings".
+3. Cada nodo debe tener: "id" (string único), "name", "type" (tipo completo n8n), 
+   "typeVersion" (int), "position" ([x, y]), "parameters" (objeto).
+4. El primer nodo siempre es un trigger (Webhook, Schedule, Gmail Trigger, etc.).
+5. "connections": mapea el "id" del nodo origen a {"main": [[{"node": "id_destino", "type": "main", "index": 0}]]}.
+6. "settings": {"executionOrder": "v1"}.
+7. Si el contexto de credenciales indica credenciales específicas, DEBES incluirlas en 
+   el nodo correspondiente bajo "credentials": {"tipo_cred": {"id": "PLACEHOLDER", "name": "Nombre"}}.
+
+TIPOS DE NODO COMUNES:
+n8n-nodes-base.webhook | n8n-nodes-base.gmail | n8n-nodes-base.googleDrive
+n8n-nodes-base.googleSheets | n8n-nodes-base.slack | n8n-nodes-base.httpRequest
+n8n-nodes-base.set | n8n-nodes-base.if | n8n-nodes-base.scheduleTrigger
+n8n-nodes-base.postgres | n8n-nodes-base.mysql | n8n-nodes-base.telegram
+n8n-nodes-base.code | n8n-nodes-base.emailSend | n8n-nodes-base.github
+n8n-nodes-base.notion | n8n-nodes-base.airtable | n8n-nodes-base.discord
+"""
+
+# ── Credential Analysis System Prompt ────────────────────────────────────────
+_ANALYSIS_SYSTEM = """
+Eres un analizador de flujos n8n. Dado un comando de automatización en español,
+identifica qué nodos de n8n requerirán credenciales y de qué tipo.
+
+Responde ÚNICAMENTE con un array JSON. Sin markdown, sin texto adicional.
+
+Tipos de credencial n8n conocidos:
+- gmailOAuth2          → nodos Gmail
+- googleDriveOAuth2    → nodos Google Drive
+- googleSheetsOAuth2   → nodos Google Sheets
+- slackApi             → nodos Slack
+- githubApi            → nodos GitHub
+- notionApi            → nodos Notion
+- airtableApi          → nodos Airtable
+- telegramApi          → nodos Telegram
+- discordWebhookApi    → nodos Discord
+- mysqlCredentials     → nodos MySQL
+- postgres             → nodos PostgreSQL
+- httpBasicAuth        → HTTP Request con autenticación básica
+
+Formato de respuesta:
+[
+  {
+    "node_type": "n8n-nodes-base.gmail",
+    "node_name": "Gmail Trigger",
+    "credential_type": "gmailOAuth2",
+    "credential_label": "Gmail OAuth2",
+    "purpose": "Para leer correos entrantes de Gmail"
+  }
+]
+
+Si ningún nodo requiere credenciales (ej: solo Webhook + HTTP sin auth), devuelve [].
 """
 
 
 class LLMService:
     """
-    Handles:
-      - STT transcription via OpenAI Whisper (local model)
-      - Workflow JSON generation via Ollama (Llama3) or OpenAI
+    Handles STT (Whisper) and LLM operations (Groq → OpenAI → Ollama).
     """
 
     def __init__(self) -> None:
-        self.llm_model   = os.getenv("LLM_MODEL", "openai/gpt-oss-120b")
-        self.ollama_url  = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
+        self.groq_key    = GROQ_API_KEY
+        self.groq_model  = GROQ_MODEL
         self.openai_key  = os.getenv("OPENAI_API_KEY", "")
-        self.groq_key    = os.getenv("LLM_API_KEY", "")
-        self._whisper_model: Any = None
+        self.ollama_url  = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
+        self.ollama_model= os.getenv("LLM_MODEL", "llama3:8b")
+        self._whisper    = None
 
     # ── Whisper STT ───────────────────────────────────────────────────────────
     def _load_whisper(self):
-        if self._whisper_model is None:
-            self._whisper_model = whisper.load_model("base")
-        return self._whisper_model
+        if self._whisper is None:
+            import whisper as _w
+            self._whisper = _w.load_model("base")
+        return self._whisper
 
     def transcribe_audio(self, audio_bytes: bytes, filename: str = "audio.webm") -> str:
-        """Write audio to a temp file and run Whisper STT."""
         suffix = "." + filename.rsplit(".", 1)[-1] if "." in filename else ".webm"
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             tmp.write(audio_bytes)
-            tmp_path = tmp.name
-
+            path = tmp.name
         try:
-            model = self._load_whisper()
-            result = model.transcribe(tmp_path, language="es", fp16=False)
+            result = self._load_whisper().transcribe(path, language="es", fp16=False)
             text = result.get("text", "").strip()
         finally:
-            os.unlink(tmp_path)
-
+            os.unlink(path)
         if not text:
             raise ValueError("No se reconoció voz en el audio.")
         return text
 
-    # ── LLM JSON Generation ────────────────────────────────────────────────────
-    async def generate_workflow_json(self, text: str) -> dict:
+    # ── Credential Analysis ───────────────────────────────────────────────────
+    async def analyze_for_credentials(self, text: str) -> list[dict]:
         """
-        Send transcribed text to LLM and get back a valid n8n workflow JSON.
-        Tries Groq first, then Ollama, falls back to OpenAI.
+        Asks the LLM to identify which n8n credential types are needed for this workflow.
+        Returns a list of {node_type, node_name, credential_type, credential_label, purpose}.
         """
-        raw = ""
-        
-        # 1. Prioridad principal: Groq
-        if self.groq_key:
-            raw = await self._call_groq(text)
-            
-        # 2. Fallback local: Ollama
-        if not raw and self.ollama_url:
-            raw = await self._call_ollama(text)
-            
-        # 3. Fallback nube: OpenAI
-        if not raw and self.openai_key:
-            raw = await self._call_openai(text)
+        raw = await self._chat(
+            system=_ANALYSIS_SYSTEM,
+            user=f"Comando de automatización: {text}",
+            max_tokens=800,
+            temperature=0.05,
+        )
+        return self._parse_json_array(raw)
 
-        if not raw:
-            raise ValueError("El LLM no devolvió una respuesta válida. Revisa tus API Keys o conexión.")
+    # ── Workflow Generation with Credential Context ────────────────────────────
+    async def generate_workflow_with_credentials(
+        self,
+        text: str,
+        credential_context: str = "",
+    ) -> dict:
+        """
+        Generates a full n8n workflow JSON, optionally with credential context
+        injected into the system prompt.
+        """
+        system = _N8N_SYSTEM
+        if credential_context:
+            system = f"{_N8N_SYSTEM}\n\n{credential_context}"
 
-        workflow = self._parse_and_validate_json(raw)
-        return workflow
+        raw = await self._chat(
+            system=system,
+            user=f"Crea un flujo n8n para: {text}",
+            max_tokens=3000,
+            temperature=0.1,
+        )
+        return self._parse_and_validate_workflow(raw)
 
-    async def _call_ollama(self, text: str) -> str:
-        """POST to local Ollama API."""
+    # ── Internal: unified chat dispatcher ────────────────────────────────────
+    async def _chat(
+        self,
+        system: str,
+        user: str,
+        max_tokens: int = 2000,
+        temperature: float = 0.1,
+    ) -> str:
+        # 1. Groq (primary)
+        if self.groq_key and _GROQ_AVAILABLE:
+            result = await self._groq_chat(system, user, max_tokens, temperature)
+            if result:
+                return result
+
+        # 2. OpenAI (first fallback)
+        if self.openai_key:
+            result = await self._openai_chat(system, user, max_tokens, temperature)
+            if result:
+                return result
+
+        # 3. Ollama (last resort)
+        result = await self._ollama_chat(system, user, max_tokens, temperature)
+        if result:
+            return result
+
+        raise RuntimeError("Ningún proveedor de LLM respondió correctamente.")
+
+    async def _groq_chat(self, system, user, max_tokens, temperature) -> str:
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                resp = await client.post(
-                    f"{self.ollama_url}/api/generate",
-                    json={
-                        "model": self.llm_model,
-                        "prompt": f"{N8N_SYSTEM_PROMPT}\n\nUSER REQUEST:\n{text}",
-                        "stream": False,
-                        "options": {"temperature": 0.1, "num_predict": 2048},
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                return data.get("response", "")
+            client = AsyncGroq(api_key=self.groq_key)
+            resp = await client.chat.completions.create(
+                model=self.groq_model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user",   "content": user},
+                ],
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+            return resp.choices[0].message.content or ""
         except Exception as exc:
-            print(f"[LLMService] Ollama error: {exc}")
+            print(f"[LLM] Groq error: {exc}")
             return ""
 
-    async def _call_openai(self, text: str) -> str:
-        """Call OpenAI Chat Completions."""
+    async def _openai_chat(self, system, user, max_tokens, temperature) -> str:
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                resp = await client.post(
+            async with httpx.AsyncClient(timeout=60.0) as c:
+                r = await c.post(
                     "https://api.openai.com/v1/chat/completions",
                     headers={"Authorization": f"Bearer {self.openai_key}"},
                     json={
                         "model": "gpt-4o-mini",
                         "messages": [
-                            {"role": "system", "content": N8N_SYSTEM_PROMPT},
-                            {"role": "user",   "content": text},
+                            {"role": "system", "content": system},
+                            {"role": "user",   "content": user},
                         ],
-                        "temperature": 0.1,
+                        "max_tokens":  max_tokens,
+                        "temperature": temperature,
                     },
                 )
-                resp.raise_for_status()
-                return resp.json()["choices"][0]["message"]["content"]
+                r.raise_for_status()
+                return r.json()["choices"][0]["message"]["content"]
         except Exception as exc:
-            print(f"[LLMService] OpenAI error: {exc}")
+            print(f"[LLM] OpenAI error: {exc}")
             return ""
 
-    async def _call_groq(self, text: str) -> str:
-        """Call Groq API (OpenAI compatible endpoint)."""
+    async def _ollama_chat(self, system, user, max_tokens, temperature) -> str:
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {self.groq_key}"},
+            prompt = f"{system}\n\nUSER: {user}"
+            async with httpx.AsyncClient(timeout=90.0) as c:
+                r = await c.post(
+                    f"{self.ollama_url}/api/generate",
                     json={
-                        "model": self.llm_model,
-                        "messages": [
-                            {"role": "system", "content": N8N_SYSTEM_PROMPT},
-                            {"role": "user",   "content": text},
-                        ],
-                        # Temperatura baja para asegurar que devuelva JSON estricto
-                        "temperature": 0.1, 
+                        "model":  self.ollama_model,
+                        "prompt": prompt,
+                        "stream": False,
+                        "options": {"temperature": temperature, "num_predict": max_tokens},
                     },
                 )
-                resp.raise_for_status()
-                return resp.json()["choices"][0]["message"]["content"]
+                r.raise_for_status()
+                return r.json().get("response", "")
         except Exception as exc:
-            print(f"[LLMService] Groq error: {exc}")
+            print(f"[LLM] Ollama error: {exc}")
             return ""
-        
-    def _parse_and_validate_json(self, raw: str) -> dict:
-        """Extract and validate JSON from LLM response."""
-        # Strip markdown code fences if present
-        cleaned = re.sub(r"```(?:json)?", "", raw).strip()
-        cleaned = cleaned.rstrip("`").strip()
 
-        # Try direct parse
+    # ── JSON parsers ──────────────────────────────────────────────────────────
+    @staticmethod
+    def _parse_json_array(raw: str) -> list[dict]:
+        """Extract a JSON array from potentially messy LLM output."""
+        cleaned = re.sub(r"```(?:json)?", "", raw).strip().rstrip("`").strip()
         try:
-            workflow = json.loads(cleaned)
+            result = json.loads(cleaned)
+            return result if isinstance(result, list) else []
         except json.JSONDecodeError:
-            # Find first { ... } block
+            match = re.search(r"\[.*\]", cleaned, re.DOTALL)
+            if match:
+                try:
+                    return json.loads(match.group())
+                except Exception:
+                    pass
+        return []
+
+    @staticmethod
+    def _parse_and_validate_workflow(raw: str) -> dict:
+        """Extract and validate the n8n workflow JSON from LLM output."""
+        cleaned = re.sub(r"```(?:json)?", "", raw).strip().rstrip("`").strip()
+        try:
+            wf = json.loads(cleaned)
+        except json.JSONDecodeError:
             match = re.search(r"\{.*\}", cleaned, re.DOTALL)
             if not match:
                 raise ValueError(
                     "No pude estructurar el flujo correctamente. "
                     "Por favor, sé más específico con los servicios que deseas conectar."
                 )
-            workflow = json.loads(match.group())
+            wf = json.loads(match.group())
 
-        # Validate required keys
         required = {"name", "nodes", "connections", "settings"}
-        missing  = required - set(workflow.keys())
+        missing  = required - set(wf.keys())
         if missing:
             raise ValueError(
                 f"El JSON generado no tiene los campos requeridos: {missing}. "
                 "Intenta ser más específico."
             )
-
-        if not isinstance(workflow.get("nodes"), list) or not workflow["nodes"]:
+        if not isinstance(wf.get("nodes"), list) or not wf["nodes"]:
             raise ValueError("El flujo generado no contiene nodos. Sé más específico.")
-
-        return workflow
+        return wf
 
     @staticmethod
     def extract_node_names(workflow: dict) -> list[str]:
-        """Return a list of node names for the preview UI."""
         return [n.get("name", n.get("type", "Nodo")) for n in workflow.get("nodes", [])]

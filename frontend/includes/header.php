@@ -6,11 +6,11 @@ $user = $auth->getCurrentUser();
 
 $currentPage = basename($_SERVER['PHP_SELF'], '.php');
 $navItems = [
-    'dashboard'      => ['label' => 'Dashboard',        'icon' => 'grid'],
-    'workflows'      => ['label' => 'Flujos',            'icon' => 'git-merge'],
-    'infrastructure' => ['label' => 'Infraestructura',   'icon' => 'server'],
-    'credentials'    => ['label' => 'Credenciales',      'icon' => 'key'],
-    'logs'           => ['label' => 'Logs',              'icon' => 'terminal'],
+    'dashboard'      => ['label' => 'Dashboard',      'icon' => 'grid'],
+    'workflows'      => ['label' => 'Flujos',          'icon' => 'git-merge'],
+    'infrastructure' => ['label' => 'Infraestructura', 'icon' => 'server'],
+    'credentials'    => ['label' => 'Credenciales',    'icon' => 'key'],
+    'logs'           => ['label' => 'Logs',            'icon' => 'terminal'],
 ];
 ?>
 <!DOCTYPE html>
@@ -21,15 +21,17 @@ $navItems = [
   <title>ClawFlow — <?= htmlspecialchars($pageTitle ?? 'Dashboard') ?></title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <!-- Main design system -->
   <link rel="stylesheet" href="/assets/css/style.css">
+  <!-- Credential selection modal additions -->
+  <link rel="stylesheet" href="/assets/css/cred_additions.css">
   <script src="https://unpkg.com/feather-icons@4.29.1/dist/feather.min.js" defer></script>
 </head>
 <body>
 
-<!-- Animated grid background -->
 <div class="grid-bg" aria-hidden="true"></div>
 
-<!-- Sidebar Nav -->
+<!-- Sidebar -->
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-logo">
     <span class="logo-claw">CLAW</span><span class="logo-flow">FLOW</span>
@@ -63,7 +65,7 @@ $navItems = [
   </div>
 </aside>
 
-<!-- Main Content Wrapper -->
+<!-- Main Content -->
 <main class="main-content" id="main-content">
   <div class="topbar">
     <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">

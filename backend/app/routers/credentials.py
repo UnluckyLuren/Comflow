@@ -14,7 +14,6 @@ from app.models.database import CredencialAPI, get_db, Usuario
 from app.services.auth_service import get_current_user
 from app.services.encryption_service import EncryptionService
 
-# CORRECCIÓN 1: La carpeta real es 'routers', no 'routes'
 from app.routers.workflows import _get_n8n
 from app.services.n8n_service import N8NService
 
@@ -29,13 +28,13 @@ class AddCredentialRequest(BaseModel):
 # ── UC08: List Credentials ─────────────────────────────────────────────────────
 @router.get("/list")
 async def list_credentials(db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_user)):
-    # 1. Obtener locales
+    # Obtener locales
     creds = db.query(CredencialAPI).filter(
         CredencialAPI.id_usuario == current_user.id_usuario, 
         CredencialAPI.activa == True
     ).all()
     
-    # 2. Obtener de n8n para fusionar
+    # Obtener de n8n para fusionar
     svc, _ = _get_n8n(db, current_user)
     
     lista_final = []
@@ -67,7 +66,7 @@ async def list_credentials(db: Session = Depends(get_db), current_user: Usuario 
     return {"credentials": lista_final}
 
 # ── UC08: Add / Validate Credential ───────────────────────────────────────────
-# CORRECCIÓN 2: Unificada a una sola función
+
 @router.post("/add")
 async def add_credential(
     body: AddCredentialRequest, 
