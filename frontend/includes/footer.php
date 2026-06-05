@@ -134,6 +134,37 @@
   </div>
 </div>
 
+<!-- Credential Selection Modal -->
+<div class="modal-overlay" id="credSelectionModal" role="dialog" aria-modal="true">
+  <div class="modal cred-modal">
+    <button class="modal-close" id="cancelCredSelection"><i data-feather="x"></i></button>
+    <div class="cred-modal-header">
+      <div class="cred-modal-icon"><i data-feather="key"></i></div>
+      <div>
+        <h2>Credenciales para el Flujo</h2>
+        <p>ClawFlow identificó qué accesos necesita este flujo. Confirma o asigna cada uno.</p>
+      </div>
+    </div>
+    
+    <div class="cred-slots-container" id="credSlotsContainer">
+      <!-- Los slots de credenciales se insertan aquí vía JS -->
+    </div>
+    
+    <div class="cred-modal-footer">
+      <div class="cred-modal-hint">
+        <i data-feather="info"></i>
+        <span>Las credenciales se sincronizarán automáticamente con n8n al desplegar el flujo.</span>
+      </div>
+      <div class="cred-modal-actions">
+        <button class="btn btn-ghost" id="cancelCredSelection2">Cancelar</button>
+        <button class="btn btn-primary btn-glow" id="confirmCredSelection">
+          Continuar y Generar Flujo <i data-feather="arrow-right"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://unpkg.com/feather-icons"></script>
 
 <script src="/assets/js/utils.js"></script>

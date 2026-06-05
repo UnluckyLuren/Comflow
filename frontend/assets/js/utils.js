@@ -74,20 +74,34 @@ function getCookie(name) {
 }
 
 async function apiFetch(url, options = {}) {
+  // 1. Extraemos la cookie manualmente para inyectarla en los Headers como respaldo
+  const sessionUid = getCookie('cf_uid');
+
   const defaults = {
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include', // <-- Esto es lo que envía la cookie cf_uid automáticamente
+    headers: { 
+      'Content-Type': 'application/json',
+      // Inyectamos el ID de sesión en los headers por si falla la cookie nativa
+      ...(sessionUid ? { 'X-User-Id': sessionUid } : {}) 
+    },
+    credentials: 'include', 
   };
+  
   const merged = { ...defaults, ...options };
   if (merged.headers && options.headers) {
     merged.headers = { ...defaults.headers, ...options.headers };
   }
-  const res = await fetch(url, merged);
-  if (res.status === 401) {
-    window.location.href = '/index.php?expired=1';
-    return;
+  
+  try {
+    const res = await fetch(url, merged);
+    if (res.status === 401) {
+      window.location.href = '/index.php?expired=1';
+      return null;
+    }
+    return res;
+  } catch (error) {
+    console.error("Fetch Error:", error);
+    throw error;
   }
-  return res;
 }
 
 // Minimal Feather icon paths (used in JS-created elements)
