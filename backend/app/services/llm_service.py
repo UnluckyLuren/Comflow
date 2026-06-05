@@ -159,7 +159,7 @@ class LLMService:
         temperature: float = 0.1,
     ) -> str:
         # 1. Groq (primary)
-        if self.groq_key and _GROQ_AVAILABLE:
+        if self.groq_key:
             result = await self._groq_chat(system, user, max_tokens, temperature)
             if result:
                 return result

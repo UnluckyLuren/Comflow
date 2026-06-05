@@ -167,6 +167,20 @@ async def delete_credential(
     if not cred:
         raise HTTPException(status_code=404, detail="Credencial no encontrada.")
 
-    cred.activa = False  # Soft delete
+    # NUEVO: Intentar borrar la credencial directamente en el servidor n8n usando su Alias
+    svc = _get_n8n_service(db, current_user)
+    try:
+        # Buscamos en n8n si existe una credencial con el nombre exacto de nuestro Alias
+        n8n_creds = await svc.list_credentials()
+        target = next((c for c in n8n_creds if c.get("name") == cred.nombre_app), None)
+        if target and "id" in target:
+            async with svc._client() as client:
+                # n8n elimina credenciales con una petición DELETE a /credentials/[id]
+                await client.delete(f"{svc.base}/credentials/{target['id']}")
+    except Exception as e:
+        print(f"[Credentials/Delete] Error sincronizando borrado con n8n: {e}")
+
+    # Borrado definitivo en la base de datos local para que no vuelva
+    db.delete(cred)
     db.commit()
     return {"success": True}
