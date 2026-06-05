@@ -1,5 +1,5 @@
 /**
- * ClawFlow — VoiceController (Anti-Amnesia + Select Fix)
+ * ClawFlow — VoiceController  (v5 - Final Fix)
  */
 class VoiceController {
   constructor() {
@@ -64,7 +64,6 @@ class VoiceController {
   }
 
   hideVoiceModalSafely() {
-    // NUEVO: Oculta la ventana SIN borrar el texto (Evita Error 422)
     if (this.isRecording) this.stopRecording();
     this.voiceModal?.classList.remove('open');
     this._releaseStream();
@@ -180,7 +179,7 @@ class VoiceController {
       this.analysisData = data;
 
       if (data.needs_interaction) {
-        this.hideVoiceModalSafely(); // <-- AQUÍ SE EVITA EL BORRADO DE TEXTO
+        this.hideVoiceModalSafely(); 
         this._openCredModal(data);
       } else {
         this.selectedCreds = data.auto_selected || [];
@@ -192,6 +191,7 @@ class VoiceController {
   }
 
   async processCommand() {
+    // AQUI ES DONDE SE SALVA EL TEXTO PARA EVITAR EL 422
     const text = this.transcriptText || this.manualInput?.value?.trim();
     if (!text) { showToast('Ingresa un comando primero', 'warning'); return; }
 
@@ -211,7 +211,7 @@ class VoiceController {
       const res  = await apiFetch('/api/voice/generate-flow', {
         method: 'POST',
         body: JSON.stringify({
-          text: text,
+          text: text, // Enviamos el texto que mantuvimos en la memoria de la clase
           selected_credentials: selectedCreds,
           command_id: this.pendingCmdId,
         }),
@@ -238,7 +238,6 @@ class VoiceController {
     const assignments = analysisData.credential_assignments || [];
     container.innerHTML = assignments.map((a, idx) => this._renderCredSlot(a, idx)).join('');
 
-    // Prevenir duplicación de eventos de click
     const confirmBtn = document.getElementById('confirmCredSelection');
     if (confirmBtn) {
       confirmBtn.onclick = () => {
@@ -247,10 +246,10 @@ class VoiceController {
         modal.classList.remove('open');
         this.selectedCreds = selections;
         
-        // Enviamos el texto que mantuvimos a salvo
+        // Ejecutamos la generación enviando el texto guardado
         this._generateFlow(
           this.transcriptText || this.manualInput?.value?.trim() || '',
-          selections,
+          selections
         );
       };
     }
@@ -273,11 +272,13 @@ class VoiceController {
       contentHtml = `
         <input type="hidden" class="cred-mode" data-idx="${idx}" value="use_stored">
         <input type="hidden" class="cred-db-id" data-idx="${idx}" value="${matches[0].id}">
+        <input type="hidden" class="cred-name" data-idx="${idx}" value="${escapeHtml(matches[0].name)}">
         <div class="cred-auto-badge">
           <span style="color:var(--green)">✓ Auto-seleccionada:</span>
           <strong>${escapeHtml(matches[0].name)}</strong>
         </div>`;
     } else if (status === 'multiple') {
+      // CORRECCIÓN MAGISTRAL DEL SELECT: El menú desplegable correcto
       const options = matches.map((m, mi) => `<option value="${m.id}" data-name="${escapeHtml(m.name)}" ${mi === 0 ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('');
       contentHtml = `
         <input type="hidden" class="cred-mode" data-idx="${idx}" value="use_stored">
@@ -330,18 +331,40 @@ class VoiceController {
 
       const modeEl = slot.querySelector(`.cred-mode[data-idx="${idx}"]`);
       const dbIdEl = slot.querySelector(`.cred-db-id[data-idx="${idx}"]`);
+      const nameEl = slot.querySelector(`.cred-name[data-idx="${idx}"]`);
 
       if (a.status === 'found') {
-        result.push({ node_type: a.node_type, credential_type: a.credential_type, credential_label: a.credential_label, mode: 'use_stored', db_credential_id: parseInt(dbIdEl?.value || '0'), credential_name: a.matches[0].name });
+        result.push({ 
+          node_type: a.node_type, 
+          credential_type: a.credential_type, 
+          credential_label: a.credential_label, 
+          mode: 'use_stored', 
+          db_credential_id: parseInt(dbIdEl?.value || '0'), 
+          credential_name: a.matches[0].name 
+        });
       } else if (a.status === 'multiple') {
         const selectEl = slot.querySelector(`.cred-select[data-idx="${idx}"]`);
         if (selectEl?.value === 'manual') {
           const manualVal = slot.querySelector(`#credManual_${idx}`)?.value?.trim();
           if (!manualVal) { showToast(`Ingresa el nombre manual para ${a.credential_label}`, 'warning'); return null; }
-          result.push({ node_type: a.node_type, credential_type: a.credential_type, credential_label: a.credential_label, mode: 'manual_name', manual_name: manualVal, credential_name: manualVal });
+          result.push({ 
+            node_type: a.node_type, 
+            credential_type: a.credential_type, 
+            credential_label: a.credential_label, 
+            mode: 'manual_name', 
+            manual_name: manualVal, 
+            credential_name: manualVal 
+          });
         } else {
           const match = a.matches.find(m => String(m.id) === selectEl?.value);
-          result.push({ node_type: a.node_type, credential_type: a.credential_type, credential_label: a.credential_label, mode: 'use_stored', db_credential_id: parseInt(selectEl?.value), credential_name: match?.name });
+          result.push({ 
+            node_type: a.node_type, 
+            credential_type: a.credential_type, 
+            credential_label: a.credential_label, 
+            mode: 'use_stored', 
+            db_credential_id: parseInt(selectEl?.value), 
+            credential_name: match?.name 
+          });
         }
       } else {
         const activeBtn = slot.querySelector('.cred-opt-btn.active');
@@ -349,12 +372,31 @@ class VoiceController {
         if (opt === 'manual') {
           const manualVal = slot.querySelector(`#credManualNotFound_${idx}`)?.value?.trim();
           if (manualVal) {
-            result.push({ node_type: a.node_type, credential_type: a.credential_type, credential_label: a.credential_label, mode: 'manual_name', manual_name: manualVal, credential_name: manualVal });
+            result.push({ 
+              node_type: a.node_type, 
+              credential_type: a.credential_type, 
+              credential_label: a.credential_label, 
+              mode: 'manual_name', 
+              manual_name: manualVal, 
+              credential_name: manualVal 
+            });
           } else {
-            result.push({ node_type: a.node_type, credential_type: a.credential_type, credential_label: a.credential_label, mode: 'skip', credential_name: '' });
+            result.push({ 
+              node_type: a.node_type, 
+              credential_type: a.credential_type, 
+              credential_label: a.credential_label, 
+              mode: 'skip', 
+              credential_name: '' 
+            });
           }
         } else {
-          result.push({ node_type: a.node_type, credential_type: a.credential_type, credential_label: a.credential_label, mode: 'skip', credential_name: '' });
+          result.push({ 
+            node_type: a.node_type, 
+            credential_type: a.credential_type, 
+            credential_label: a.credential_label, 
+            mode: 'skip', 
+            credential_name: '' 
+          });
         }
       }
     }
@@ -416,6 +458,7 @@ class VoiceController {
   }
 }
 
+// Event Listeners (Fuera de la clase)
 document.addEventListener('click', e => {
   if (!e.target.matches('.cred-opt-btn')) return;
   const idx = e.target.dataset.idx;
