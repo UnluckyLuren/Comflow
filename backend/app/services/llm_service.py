@@ -13,6 +13,7 @@ import tempfile
 from typing import Any
 
 import httpx
+from groq import Groq
 
 
 GROQ_API_KEY = os.getenv("LLMAPIKEY", "")
@@ -179,8 +180,9 @@ class LLMService:
 
     async def _groq_chat(self, system, user, max_tokens, temperature) -> str:
         try:
-            client = AsyncGroq(api_key=self.groq_key)
-            resp = await client.chat.completions.create(
+            # Usamos el cliente síncrono estándar de Groq
+            client = Groq(api_key=self.groq_key)
+            resp = client.chat.completions.create(
                 model=self.groq_model,
                 messages=[
                     {"role": "system", "content": system},
@@ -190,6 +192,7 @@ class LLMService:
                 temperature=temperature,
             )
             return resp.choices[0].message.content or ""
+        
         except Exception as exc:
             print(f"[LLM] Groq error: {exc}")
             return ""
