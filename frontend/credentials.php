@@ -86,11 +86,18 @@ require_once __DIR__ . '/includes/header.php';
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
 <script>
-// Handle custom app name
-document.getElementById('credApp').addEventListener('change', function() {
-  document.getElementById('customAppGroup').style.display =
-    this.value === 'Custom' ? 'block' : 'none';
-});
+// Handle custom app name 
+const credAppBaseEl = document.getElementById('credAppBase');
+if (credAppBaseEl) {
+  credAppBaseEl.addEventListener('change', function() {
+    const customGroup = document.getElementById('customAppGroup');
+    if (customGroup) {
+      customGroup.style.display = this.value === 'Custom' ? 'block' : 'none';
+    }
+  });
+}
+
+// Botón cancelar secundario
 document.getElementById('closeCredModal2')?.addEventListener('click', () => {
   document.getElementById('credModal')?.classList.remove('open');
 });
