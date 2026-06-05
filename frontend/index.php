@@ -122,7 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       </div>
       <div class="form-group">
         <label class="form-label">Clave de servidor</label>
-        <input type="text" name="server_key" class="form-control" placeholder="CLAWFLOW2026" required>
+        <input type="text" name="server_key" class="form-control" placeholder="---------" required>
       </div>
       <button type="submit" class="btn btn-primary full-width" style="justify-content:center;margin-top:8px">
         Registrar Administrador

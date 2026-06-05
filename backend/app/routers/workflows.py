@@ -54,7 +54,6 @@ async def deploy_workflow(
             )
         except Exception as exc:
             print(f"[deploy] Credential sync warning: {exc}")
-            # Non-fatal: deploy with placeholders, n8n will flag missing creds
 
     # 2. POST /workflows → create
     try:
@@ -81,7 +80,6 @@ async def deploy_workflow(
         db.commit()
 
     except Exception as exc:
-        # Draft fallback: save locally even when n8n is unreachable
         import time
         db.add(FlujoTrabajo(
             id_flujo_n8n=f"draft_{int(time.time())}",
@@ -111,13 +109,11 @@ async def list_workflows(
     try:
         n8n_flows = await svc.list_workflows()
     except Exception:
-        # Fallback to local DB cache
         local = db.query(FlujoTrabajo).filter(
             FlujoTrabajo.id_usuario == current_user.id_usuario
         ).order_by(FlujoTrabajo.created_at.desc()).all()
         return {"workflows": [_flujo_to_dict(f) for f in local], "source": "local"}
 
-    # Sync n8n data to local DB
     for wf in n8n_flows:
         flow_id  = str(wf.get("id", ""))
         existing = db.query(FlujoTrabajo).filter(
@@ -207,14 +203,25 @@ async def delete_workflow(
 ):
     svc = await get_n8n_for_user(db, current_user.id_usuario)
     try:
-        await svc.delete_workflow(flow_id)
+        # 1. Desactivar flujo primero (n8n bloquea el borrado de flujos activos)
+        try:
+            await svc.deactivate_workflow(flow_id)
+        except Exception:
+            pass  # Ignoramos si ya estaba inactivo o no existe
+            
+        # 2. Intentar borrar en n8n
+        success = await svc.delete_workflow(flow_id)
+        if not success:
+            print(f"n8n retornó falso al borrar el flujo {flow_id}, posiblemente ya no exista (404).")
+            
     except Exception as exc:
-        if "404" in str(exc):
-            _cleanup_local(db, flow_id)
-            return {"success": True, "note": "Flujo fantasma eliminado de la base de datos local."}
-        raise HTTPException(503, str(exc))
+        if "404" not in str(exc) and "not found" not in str(exc).lower():
+            # Solo detenemos el proceso si el error NO ES un 404
+            raise HTTPException(503, f"Error al eliminar en n8n: {exc}")
+
+    # 3. Limpieza garantizada en la BD local de ClawFlow
     _cleanup_local(db, flow_id)
-    return {"success": True}
+    return {"success": True, "note": "Eliminado correctamente de n8n y base de datos local."}
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
