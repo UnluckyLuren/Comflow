@@ -1,5 +1,5 @@
 /**
- * ClawFlow — VoiceController  (v5 - Final Fix)
+ * ClawFlow — VoiceController  (v6 - Design Restore & Fix)
  */
 class VoiceController {
   constructor() {
@@ -191,7 +191,6 @@ class VoiceController {
   }
 
   async processCommand() {
-    // AQUI ES DONDE SE SALVA EL TEXTO PARA EVITAR EL 422
     const text = this.transcriptText || this.manualInput?.value?.trim();
     if (!text) { showToast('Ingresa un comando primero', 'warning'); return; }
 
@@ -211,7 +210,7 @@ class VoiceController {
       const res  = await apiFetch('/api/voice/generate-flow', {
         method: 'POST',
         body: JSON.stringify({
-          text: text, // Enviamos el texto que mantuvimos en la memoria de la clase
+          text: text,
           selected_credentials: selectedCreds,
           command_id: this.pendingCmdId,
         }),
@@ -246,7 +245,6 @@ class VoiceController {
         modal.classList.remove('open');
         this.selectedCreds = selections;
         
-        // Ejecutamos la generación enviando el texto guardado
         this._generateFlow(
           this.transcriptText || this.manualInput?.value?.trim() || '',
           selections
@@ -278,13 +276,12 @@ class VoiceController {
           <strong>${escapeHtml(matches[0].name)}</strong>
         </div>`;
     } else if (status === 'multiple') {
-      // CORRECCIÓN MAGISTRAL DEL SELECT: El menú desplegable correcto
       const options = matches.map((m, mi) => `<option value="${m.id}" data-name="${escapeHtml(m.name)}" ${mi === 0 ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('');
       contentHtml = `
         <input type="hidden" class="cred-mode" data-idx="${idx}" value="use_stored">
         <input type="hidden" class="cred-db-id" data-idx="${idx}" value="${matches[0].id}">
         <input type="hidden" class="cred-name" data-idx="${idx}" value="${escapeHtml(matches[0].name)}">
-        <p class="text-muted" style="font-size:12px;margin-bottom:10px">Selecciona qué credencial usar:</p>
+        <p class="text-muted" style="font-size:12px;margin-bottom:10px">Tienes varias credenciales. Selecciona cuál usar:</p>
         <select class="form-control cred-select" data-idx="${idx}" style="margin-bottom: 10px;">
             ${options}
             <option value="manual">-- Usar nombre manual en n8n --</option>
@@ -293,16 +290,30 @@ class VoiceController {
           <input type="text" class="form-control cred-manual-input" id="credManual_${idx}" placeholder="Nombre exacto en n8n...">
         </div>`;
     } else {
+      // ESTE ES EL DISEÑO ORIGINAL QUE ME PEDISTE RESTAURAR
       contentHtml = `
-        <input type="hidden" class="cred-mode" data-idx="${idx}" value="skip">
+        <input type="hidden" class="cred-mode" data-idx="${idx}" value="manual">
         <div class="cred-not-found-info">
-          <p style="font-size:13px;color:var(--amber);margin-bottom:10px">No tienes esta credencial guardada.</p>
+          <p style="font-size:13px;color:var(--amber);margin-bottom:10px">No tienes esta credencial en tu Bóveda. Tienes dos opciones:</p>
+          
           <div class="cred-option-tabs">
-            <button class="cred-opt-btn active" data-opt="skip" data-idx="${idx}">⏭️ Omitir credencial (Añadir en n8n luego)</button>
-            <button class="cred-opt-btn" data-opt="manual" data-idx="${idx}">📝 Tengo el nombre en n8n</button>
+            <button class="cred-opt-btn active" data-opt="manual" data-idx="${idx}">📝 Tengo la credencial en n8n</button>
+            <button class="cred-opt-btn" data-opt="guide" data-idx="${idx}">📖 Necesito crearla</button>
+            <button class="cred-opt-btn" data-opt="skip" data-idx="${idx}">⏭️ Omitir</button>
           </div>
-          <div class="cred-opt-panel" id="credOpt_manual_${idx}" style="display:none">
-            <input type="text" class="form-control cred-manual-input" id="credManualNotFound_${idx}" placeholder="Nombre en n8n..." data-idx="${idx}" style="margin-top:10px">
+          
+          <div class="cred-opt-panel" id="credOpt_manual_${idx}">
+            <p class="text-muted" style="font-size:12px;margin:8px 0">Escribe el nombre <strong>exacto</strong> de la credencial como aparece en n8n:</p>
+            <input type="text" class="form-control cred-manual-input" id="credManualNotFound_${idx}" placeholder="Ej: Mi Gmail OAuth2" data-idx="${idx}">
+          </div>
+          
+          <div class="cred-opt-panel" id="credOpt_guide_${idx}" style="display:none">
+            <p class="text-muted" style="font-size:12px;margin-top:8px">Ve a n8n, crea la credencial y luego escribe su nombre aquí abajo.</p>
+            <input type="text" class="form-control cred-manual-input" id="credManualAfterCreate_${idx}" placeholder="Nombre de la credencial en n8n..." data-idx="${idx}" style="margin-top:8px">
+          </div>
+
+          <div class="cred-opt-panel" id="credOpt_skip_${idx}" style="display:none">
+            <p style="font-size:12px;color:var(--text-muted);margin-top:8px">El nodo se creará sin credencial. Podrás asignarla manualmente en n8n.</p>
           </div>
         </div>`;
     }
@@ -314,7 +325,7 @@ class VoiceController {
             <span style="font-size:18px">${statusIcon}</span>
             <div>
               <div class="cred-slot-label" style="color:${statusColor}">${escapeHtml(credential_label)}</div>
-              <div class="cred-slot-node text-muted">${escapeHtml(node_name)}</div>
+              <div class="cred-slot-node text-muted">${escapeHtml(node_name)} · ${escapeHtml(purpose)}</div>
             </div>
           </div>
         </div>
@@ -367,36 +378,27 @@ class VoiceController {
           });
         }
       } else {
+        // LÓGICA CORREGIDA PARA TABS (Manual, Guide, Skip)
         const activeBtn = slot.querySelector('.cred-opt-btn.active');
         const opt = activeBtn?.dataset?.opt || 'skip';
+        
         if (opt === 'manual') {
           const manualVal = slot.querySelector(`#credManualNotFound_${idx}`)?.value?.trim();
           if (manualVal) {
-            result.push({ 
-              node_type: a.node_type, 
-              credential_type: a.credential_type, 
-              credential_label: a.credential_label, 
-              mode: 'manual_name', 
-              manual_name: manualVal, 
-              credential_name: manualVal 
-            });
+            result.push({ node_type: a.node_type, credential_type: a.credential_type, credential_label: a.credential_label, mode: 'manual_name', manual_name: manualVal, credential_name: manualVal });
           } else {
-            result.push({ 
-              node_type: a.node_type, 
-              credential_type: a.credential_type, 
-              credential_label: a.credential_label, 
-              mode: 'skip', 
-              credential_name: '' 
-            });
+            showToast(`Ingresa el nombre de la credencial en n8n para ${a.credential_label} o elige Omitir.`, 'warning'); return null;
+          }
+        } else if (opt === 'guide') {
+          const guideVal = slot.querySelector(`#credManualAfterCreate_${idx}`)?.value?.trim();
+          if (guideVal) {
+            result.push({ node_type: a.node_type, credential_type: a.credential_type, credential_label: a.credential_label, mode: 'manual_name', manual_name: guideVal, credential_name: guideVal });
+          } else {
+            showToast(`Ingresa el nombre de la credencial que creaste para ${a.credential_label} o elige Omitir.`, 'warning'); return null;
           }
         } else {
-          result.push({ 
-            node_type: a.node_type, 
-            credential_type: a.credential_type, 
-            credential_label: a.credential_label, 
-            mode: 'skip', 
-            credential_name: '' 
-          });
+          // SKIP
+          result.push({ node_type: a.node_type, credential_type: a.credential_type, credential_label: a.credential_label, mode: 'skip', credential_name: '' });
         }
       }
     }
@@ -458,18 +460,24 @@ class VoiceController {
   }
 }
 
-// Event Listeners (Fuera de la clase)
+// Event Listeners para los Tabs (Omitir, Manual, Guia)
 document.addEventListener('click', e => {
   if (!e.target.matches('.cred-opt-btn')) return;
+  e.preventDefault();
   const idx = e.target.dataset.idx;
   const opt = e.target.dataset.opt;
 
+  // Actualizar botones visuales
   document.querySelectorAll(`.cred-opt-btn[data-idx="${idx}"]`).forEach(b => b.classList.remove('active'));
   e.target.classList.add('active');
 
-  const panel = document.getElementById(`credOpt_manual_${idx}`);
-  if (panel) panel.style.display = opt === 'manual' ? 'block' : 'none';
+  // Mostrar panel correspondiente
+  ['manual', 'guide', 'skip'].forEach(o => {
+    const panel = document.getElementById(`credOpt_${o}_${idx}`);
+    if (panel) panel.style.display = o === opt ? 'block' : 'none';
+  });
 
+  // Actualizar el valor oculto
   const slot = e.target.closest('.cred-slot');
   if (slot) {
     const modeEl = slot.querySelector('.cred-mode');
@@ -477,6 +485,7 @@ document.addEventListener('click', e => {
   }
 });
 
+// Event Listener para el Dropdown Select
 document.addEventListener('change', e => {
   if (!e.target.matches('.cred-select')) return;
   const idx = e.target.dataset.idx;
