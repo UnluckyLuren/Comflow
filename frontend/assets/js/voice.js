@@ -326,49 +326,36 @@ class VoiceController {
     const statusIcon = status === 'found' ? '✅' : (status === 'multiple' ? '⚡' : '⚠️');
     const statusColor = status === 'found' ? 'var(--green)' : (status === 'multiple' ? 'var(--amber)' : 'var(--red)');
 
-    // 1. Opciones sugeridas por la IA
-    const suggestedOpts = (matches || []).map(m => 
-      `<option value="${m.id}" data-type="stored" data-name="${escapeHtml(m.name)}">⭐ Detectada: ${escapeHtml(m.name)}</option>`
-    ).join('');
-
-    // 2. TODAS tus demás opciones guardadas en la bóveda (Filtramos para no duplicar las sugeridas)
-    const suggestedIds = (matches || []).map(m => String(m.id));
-    const otherOpts = this.allUserCreds
-      .filter(c => !suggestedIds.includes(String(c.id_credencial)))
-      .map(c => `<option value="${c.id_credencial}" data-type="stored" data-name="${escapeHtml(c.nombre_app)}">🔑 ${escapeHtml(c.nombre_app)} (${c.origen})</option>`)
-      .join('');
+    // PREPARAMOS TODAS LAS OPCIONES DISPONIBLES EN TU BÓVEDA
+    // Unimos las sugeridas por la IA con las que ya tienes guardadas
+    const allOptions = [
+      ...((matches || []).map(m => `<option value="${m.id}" data-type="stored" data-name="${escapeHtml(m.name)}">⭐ Sugerida: ${escapeHtml(m.name)}</option>`)),
+      ...this.allUserCreds
+        .filter(c => !matches.find(m => String(m.id) === String(c.id_credencial)))
+        .map(c => `<option value="${c.id_credencial}" data-type="stored" data-name="${escapeHtml(c.nombre_app)}">🔑 ${escapeHtml(c.nombre_app)}</option>`)
+    ].join('');
 
     return `
-      <div class="cred-slot" style="margin-bottom:16px; background:var(--bg-elevated); border:1px solid var(--border-bright); border-radius:var(--radius-lg); padding:16px;">
-        
-        <!-- Cabecera de la credencial -->
+      <div class="cred-slot" data-idx="${idx}" style="margin-bottom:16px; background:var(--bg-elevated); border:1px solid var(--border-bright); border-radius:var(--radius-lg); padding:16px;">
         <div style="display:flex; gap:12px; margin-bottom:16px;">
           <div style="font-size:20px;">${statusIcon}</div>
           <div>
-            <div style="color:${statusColor}; font-weight:bold; font-family:var(--font-display); font-size:15px;">${escapeHtml(credential_label)}</div>
-            <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">${escapeHtml(node_name)} · ${escapeHtml(purpose)}</div>
+            <div style="color:${statusColor}; font-weight:bold; font-size:15px;">${escapeHtml(credential_label)}</div>
+            <div style="font-size:12px; color:var(--text-muted);">${escapeHtml(node_name)} · ${escapeHtml(purpose)}</div>
           </div>
         </div>
         
-        <!-- EL SELECTOR UNIVERSAL -->
-        <label style="font-size:12px; color:var(--text-secondary); display:block; margin-bottom:8px;">Selecciona qué credencial conectar:</label>
-        <select class="form-control cred-select" data-idx="${idx}">
-          ${suggestedOpts ? `<optgroup label="Sugerencias de la IA">${suggestedOpts}</optgroup>` : ''}
-          ${otherOpts ? `<optgroup label="Tu Bóveda de Credenciales">${otherOpts}</optgroup>` : ''}
-          <optgroup label="Opciones manuales">
-            <option value="skip" data-type="skip" ${!suggestedOpts ? 'selected' : ''}>⏭️ Omitir (Crear nodo sin credencial por ahora)</option>
-            <option value="manual" data-type="manual">📝 Quiero escribir el nombre exacto de n8n</option>
-          </optgroup>
+        <label style="font-size:12px; color:var(--text-secondary); display:block; margin-bottom:8px;">Selecciona una credencial:</label>
+        <select class="form-control cred-select" data-idx="${idx}" style="width: 100%; cursor: pointer;">
+            ${allOptions || '<option value="skip">No tienes credenciales guardadas</option>'}
+            <option value="manual" data-type="manual">📝 Escribir nombre manual en n8n</option>
+            <option value="skip" data-type="skip">⏭️ Omitir (asignar después)</option>
         </select>
         
-        <!-- Input de texto que solo sale si escoges "Escribir nombre exacto" -->
-        <div id="credManualWrapper_${idx}" style="display:none; margin-top:12px; padding:12px; background:rgba(0,0,0,0.2); border-radius:var(--radius); border:1px dashed var(--border-bright);">
-          <label style="font-size:11px; color:var(--text-muted); margin-bottom:6px; display:block;">Nombre exacto configurado en n8n:</label>
-          <input type="text" class="form-control cred-manual-input" id="credManual_${idx}" placeholder="Ej. Mi Telegram Bot">
+        <div id="credManualWrapper_${idx}" style="display:none; margin-top:12px;">
+          <input type="text" class="form-control cred-manual-input" id="credManual_${idx}" placeholder="Nombre exacto en n8n...">
         </div>
-
-      </div>
-    `;
+      </div>`;
   }
 
   _collectCredSelections(container, assignments) {
