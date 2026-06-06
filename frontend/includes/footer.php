@@ -41,42 +41,6 @@
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════
-     Modal: Credential Selection  (NEW)
-     ═══════════════════════════════════════════════════════════ -->
-<div class="modal-overlay" id="credSelectionModal" role="dialog" aria-modal="true">
-  <div class="modal cred-modal">
-    <button class="modal-close" id="cancelCredSelection" aria-label="Cerrar"><i data-feather="x"></i></button>
-
-    <div class="cred-modal-header">
-      <div class="cred-modal-icon"><i data-feather="key"></i></div>
-      <div>
-        <h2>Credenciales para el Flujo</h2>
-        <p>ClawFlow identificó qué accesos necesita este flujo. Confirma o asigna cada uno.</p>
-      </div>
-    </div>
-
-    <!-- Slots container: filled by JS -->
-    <div id="credSlotsContainer" class="cred-slots-container"></div>
-
-    <!-- Footer actions -->
-    <div class="cred-modal-footer">
-      <div class="cred-modal-hint">
-        <i data-feather="info"></i>
-        Las credenciales API se sincronizarán automáticamente con n8n al desplegar.
-        Las OAuth2 deben crearse previamente en la UI de n8n.
-      </div>
-      <div class="cred-modal-actions">
-        <button class="btn btn-ghost" id="cancelCredSelection2">
-          <i data-feather="x"></i> Cancelar
-        </button>
-        <button class="btn btn-primary btn-glow" id="confirmCredSelection">
-          <i data-feather="arrow-right"></i> Continuar y Generar Flujo
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- ═══════════════════════════════════════════════════════════
      Modal: JSON Preview (deploy confirmation)
