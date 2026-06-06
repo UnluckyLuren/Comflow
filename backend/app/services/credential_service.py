@@ -195,15 +195,34 @@ class CredentialService:
             CredencialAPI.activa == True,
         ).all()
 
-        # Build index: n8n_type → list of stored creds
+       # Build index: n8n_type → list of stored creds
         cred_index: dict[str, list] = {}
         for cred in stored:
+            # 1. Búsqueda estricta por metadatos (el método ideal)
             base_service = cred.metadata_json.get("app_service") if cred.metadata_json else cred.nombre_app
             info = CREDENTIAL_CATALOG.get(base_service)
+            
+            # 2. Búsqueda flexible (Fuzzy) si falla la estricta
+            if not info:
+                # Intentar adivinar basándose en el nombre de la app (útil para credenciales antiguas o importadas)
+                name_lower = cred.nombre_app.lower()
+                if "telegram" in name_lower: info = CREDENTIAL_CATALOG.get("Telegram")
+                elif "github" in name_lower: info = CREDENTIAL_CATALOG.get("GitHub")
+                elif "slack" in name_lower: info = CREDENTIAL_CATALOG.get("Slack")
+                elif "discord" in name_lower: info = CREDENTIAL_CATALOG.get("Discord")
+                elif "notion" in name_lower: info = CREDENTIAL_CATALOG.get("Notion")
+                elif "airtable" in name_lower: info = CREDENTIAL_CATALOG.get("Airtable")
+                elif "gmail" in name_lower: info = CREDENTIAL_CATALOG.get("Gmail_OAuth")
+                elif "sheets" in name_lower: info = CREDENTIAL_CATALOG.get("Google_Sheets")
+                elif "drive" in name_lower: info = CREDENTIAL_CATALOG.get("Google_Drive")
+
             if info:
                 n8n_type = info["n8n_type"]
                 cred_index.setdefault(n8n_type, []).append(cred)
-
+            else:
+                # Si de verdad no se pudo identificar, asignarlo a Custom (Header genérico)
+                cred_index.setdefault("httpHeaderAuth", []).append(cred)
+                
         assignments: list[dict] = []
         needs_interaction = False
         seen_cred_types: set[str] = set()
