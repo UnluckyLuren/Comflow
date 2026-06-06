@@ -1,5 +1,6 @@
+
 /**
- * ClawFlow — VoiceController (v7 - Modal Rebuilt from scratch + Select Fix)
+ * ClawFlow — VoiceController (Rediseñado desde 0 - Unified Select & Scroll Fix)
  */
 class VoiceController {
   constructor() {
@@ -11,6 +12,7 @@ class VoiceController {
     this.selectedCreds  = [];
     this.pendingCmdId   = null;
     this.stream         = null;
+    this.allUserCreds   = []; // Almacenará todas tus credenciales de la bóveda
 
     this.voiceModal    = document.getElementById('voiceModal');
     this.previewModal  = document.getElementById('previewModal');
@@ -27,7 +29,43 @@ class VoiceController {
     this.toggleManual    = document.getElementById('toggleManualInput');
     this.fabMic          = document.getElementById('fabMicBtn');
 
+    this._injectStyles(); // Inyecta CSS para arreglar el scroll y el select
     this._bindEvents();
+  }
+
+  _injectStyles() {
+    if (document.getElementById('voiceControllerStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'voiceControllerStyles';
+    style.textContent = `
+      /* Arreglo del Modal para permitir Scroll y no salirse de pantalla */
+      #credSelectionModal .modal { 
+        display: flex !important; 
+        flex-direction: column !important; 
+        max-height: 85vh !important; 
+        overflow: hidden !important; 
+        padding: 0 !important;
+      }
+      .cred-modal-header, .cred-modal-footer { flex-shrink: 0; padding: 24px; background: var(--bg-surface); z-index: 10; }
+      #credSlotsContainer { 
+        overflow-y: auto !important; 
+        flex: 1 1 auto !important; 
+        padding: 0 24px 24px 24px !important; 
+      }
+      /* Arreglo para forzar la apariencia visual de un Select nativo */
+      .cred-select {
+        appearance: auto !important;
+        -webkit-appearance: auto !important;
+        background-color: var(--bg-elevated) !important;
+        color: var(--text-primary) !important;
+        padding: 10px 14px !important;
+        border: 1px solid var(--border-bright) !important;
+        cursor: pointer !important;
+      }
+      .cred-select optgroup { color: var(--accent); font-weight: bold; background: var(--bg-surface); }
+      .cred-select option { color: var(--text-primary); background: var(--bg-base); }
+    `;
+    document.head.appendChild(style);
   }
 
   _bindEvents() {
@@ -48,6 +86,18 @@ class VoiceController {
           if (m === this.voiceModal) this.cancelVoiceFlow();
         }
       });
+    });
+
+    // Escuchador global para el menú desplegable (Select)
+    document.addEventListener('change', e => {
+      if (!e.target.matches('.cred-select')) return;
+      const idx = e.target.dataset.idx;
+      const selectedOpt = e.target.options[e.target.selectedIndex];
+      const manualWrap = document.getElementById(`credManualWrapper_${idx}`);
+      
+      if (manualWrap) {
+        manualWrap.style.display = selectedOpt.dataset.type === 'manual' ? 'block' : 'none';
+      }
     });
   }
 
@@ -162,22 +212,31 @@ class VoiceController {
   }
 
   async _analyzeCredentials(text) {
-    showLoading('Analizando requerimientos de IA...');
+    showLoading('Analizando y buscando en tu Bóveda...');
     try {
-      const res  = await apiFetch('/api/voice/analyze', {
-        method: 'POST',
-        body: JSON.stringify({ text }),
-      });
-      const data = await res.json();
+      // Pedimos el análisis de IA y la lista de TODAS tus credenciales al mismo tiempo
+      const [analysisRes, credsRes] = await Promise.all([
+        apiFetch('/api/voice/analyze', { method: 'POST', body: JSON.stringify({ text }) }),
+        apiFetch('/api/credentials/list')
+      ]);
+      
+      const data = await analysisRes.json();
+      
+      if (credsRes && credsRes.ok) {
+        const credsData = await credsRes.json();
+        this.allUserCreds = credsData.credentials || [];
+      } else {
+        this.allUserCreds = [];
+      }
+
       hideLoading();
 
-      if (!res?.ok) {
+      if (!analysisRes?.ok) {
         showToast('Procediendo sin credenciales auto-inyectadas.', 'warning');
         return;
       }
 
       this.analysisData = data;
-      console.log("🔍 Datos recibidos del backend:", data);
 
       if (data.needs_interaction) {
         this.hideVoiceModalSafely(); 
@@ -237,15 +296,15 @@ class VoiceController {
     const container = document.getElementById('credSlotsContainer');
     const assignments = analysisData.credential_assignments || [];
     
-    // Generar el HTML de las credenciales
+    // Inyectamos el HTML construido desde cero
     container.innerHTML = assignments.map((a, idx) => this._renderCredSlot(a, idx)).join('');
 
-    // Asignar evento al botón de confirmar
     const confirmBtn = document.getElementById('confirmCredSelection');
     if (confirmBtn) {
       confirmBtn.onclick = () => {
         const selections = this._collectCredSelections(container, assignments);
-        if (!selections) return; 
+        if (!selections) return; // Validación falló
+        
         modal.classList.remove('open');
         this.selectedCreds = selections;
         this._generateFlow(
@@ -264,81 +323,52 @@ class VoiceController {
 
   _renderCredSlot(assignment, idx) {
     const { credential_type, credential_label, node_name, purpose, status, matches } = assignment;
-    const statusIcon = { found: '✅', multiple: '⚡', not_found: '⚠️' }[status] || '❓';
-    const statusColor = { found: 'var(--green)', multiple: 'var(--amber)', not_found: 'var(--red)' }[status];
+    const statusIcon = status === 'found' ? '✅' : (status === 'multiple' ? '⚡' : '⚠️');
+    const statusColor = status === 'found' ? 'var(--green)' : (status === 'multiple' ? 'var(--amber)' : 'var(--red)');
 
-    let contentHtml = '';
+    // 1. Opciones sugeridas por la IA
+    const suggestedOpts = (matches || []).map(m => 
+      `<option value="${m.id}" data-type="stored" data-name="${escapeHtml(m.name)}">⭐ Detectada: ${escapeHtml(m.name)}</option>`
+    ).join('');
 
-    if (status === 'found') {
-      contentHtml = `
-        <input type="hidden" class="cred-mode" data-idx="${idx}" value="use_stored">
-        <input type="hidden" class="cred-db-id" data-idx="${idx}" value="${matches[0].id}">
-        <input type="hidden" class="cred-name" data-idx="${idx}" value="${escapeHtml(matches[0].name)}">
-        <div class="cred-auto-badge">
-          <span style="color:var(--green)">✓ Auto-seleccionada:</span>
-          <strong>${escapeHtml(matches[0].name)}</strong>
-        </div>`;
-        
-    } else if (status === 'multiple') {
-      // FORZAMOS EL ESTILO DEL SELECT PARA QUE NO SE VEA COMO CAJA DE TEXTO
-      const options = matches.map((m, mi) => `<option value="${m.id}" data-name="${escapeHtml(m.name)}" ${mi === 0 ? 'selected' : ''}>${escapeHtml(m.name)} (Estado: ${m.estado})</option>`).join('');
-      contentHtml = `
-        <input type="hidden" class="cred-mode" data-idx="${idx}" value="use_stored">
-        <input type="hidden" class="cred-db-id" data-idx="${idx}" value="${matches[0].id}">
-        <input type="hidden" class="cred-name" data-idx="${idx}" value="${escapeHtml(matches[0].name)}">
-        
-        <p class="text-muted" style="font-size:12px;margin-bottom:10px">Tienes varias credenciales compatibles. Selecciona cuál usar:</p>
-        <select class="form-control cred-select" data-idx="${idx}" style="margin-bottom: 10px; appearance: auto; -webkit-appearance: auto; cursor: pointer;">
-            ${options}
-            <option value="manual">-- Quiero usar un nombre manual de n8n --</option>
-        </select>
-        
-        <div id="credManualWrapper_${idx}" style="display:none; margin-top: 10px;">
-          <label style="font-size:11px;color:var(--text-muted)">Escribe el nombre de la credencial en n8n:</label>
-          <input type="text" class="form-control cred-manual-input" id="credManual_${idx}" placeholder="Ej. Mi Bot Ventas">
-        </div>`;
-        
-    } else {
-      contentHtml = `
-        <input type="hidden" class="cred-mode" data-idx="${idx}" value="manual">
-        <div class="cred-not-found-info">
-          <p style="font-size:13px;color:var(--amber);margin-bottom:10px">No tienes esta credencial en tu Bóveda. Tienes dos opciones:</p>
-          
-          <div class="cred-option-tabs">
-            <button class="cred-opt-btn active" data-opt="manual" data-idx="${idx}">📝 Tengo la credencial en n8n</button>
-            <button class="cred-opt-btn" data-opt="guide" data-idx="${idx}">📖 Necesito crearla</button>
-            <button class="cred-opt-btn" data-opt="skip" data-idx="${idx}">⏭️ Omitir</button>
-          </div>
-          
-          <div class="cred-opt-panel" id="credOpt_manual_${idx}">
-            <p class="text-muted" style="font-size:12px;margin:8px 0">Escribe el nombre <strong>exacto</strong> de la credencial como aparece en n8n:</p>
-            <input type="text" class="form-control cred-manual-input" id="credManualNotFound_${idx}" placeholder="Ej: Mi Gmail OAuth2" data-idx="${idx}">
-          </div>
-          
-          <div class="cred-opt-panel" id="credOpt_guide_${idx}" style="display:none">
-            <p class="text-muted" style="font-size:12px;margin-top:8px">Ve a n8n, crea la credencial y luego escribe su nombre aquí abajo.</p>
-            <input type="text" class="form-control cred-manual-input" id="credManualAfterCreate_${idx}" placeholder="Nombre de la credencial en n8n..." data-idx="${idx}" style="margin-top:8px">
-          </div>
-
-          <div class="cred-opt-panel" id="credOpt_skip_${idx}" style="display:none">
-            <p style="font-size:12px;color:var(--text-muted);margin-top:8px">El nodo se creará sin credencial. Podrás asignarla manualmente en n8n.</p>
-          </div>
-        </div>`;
-    }
+    // 2. TODAS tus demás opciones guardadas en la bóveda (Filtramos para no duplicar las sugeridas)
+    const suggestedIds = (matches || []).map(m => String(m.id));
+    const otherOpts = this.allUserCreds
+      .filter(c => !suggestedIds.includes(String(c.id_credencial)))
+      .map(c => `<option value="${c.id_credencial}" data-type="stored" data-name="${escapeHtml(c.nombre_app)}">🔑 ${escapeHtml(c.nombre_app)} (${c.origen})</option>`)
+      .join('');
 
     return `
-      <div class="cred-slot" data-idx="${idx}">
-        <div class="cred-slot-header">
-          <div class="cred-slot-info">
-            <span style="font-size:18px">${statusIcon}</span>
-            <div>
-              <div class="cred-slot-label" style="color:${statusColor}">${escapeHtml(credential_label)}</div>
-              <div class="cred-slot-node text-muted">${escapeHtml(node_name)} · ${escapeHtml(purpose)}</div>
-            </div>
+      <div class="cred-slot" style="margin-bottom:16px; background:var(--bg-elevated); border:1px solid var(--border-bright); border-radius:var(--radius-lg); padding:16px;">
+        
+        <!-- Cabecera de la credencial -->
+        <div style="display:flex; gap:12px; margin-bottom:16px;">
+          <div style="font-size:20px;">${statusIcon}</div>
+          <div>
+            <div style="color:${statusColor}; font-weight:bold; font-family:var(--font-display); font-size:15px;">${escapeHtml(credential_label)}</div>
+            <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">${escapeHtml(node_name)} · ${escapeHtml(purpose)}</div>
           </div>
         </div>
-        <div class="cred-slot-body">${contentHtml}</div>
-      </div>`;
+        
+        <!-- EL SELECTOR UNIVERSAL -->
+        <label style="font-size:12px; color:var(--text-secondary); display:block; margin-bottom:8px;">Selecciona qué credencial conectar:</label>
+        <select class="form-control cred-select" data-idx="${idx}">
+          ${suggestedOpts ? `<optgroup label="Sugerencias de la IA">${suggestedOpts}</optgroup>` : ''}
+          ${otherOpts ? `<optgroup label="Tu Bóveda de Credenciales">${otherOpts}</optgroup>` : ''}
+          <optgroup label="Opciones manuales">
+            <option value="skip" data-type="skip" ${!suggestedOpts ? 'selected' : ''}>⏭️ Omitir (Crear nodo sin credencial por ahora)</option>
+            <option value="manual" data-type="manual">📝 Quiero escribir el nombre exacto de n8n</option>
+          </optgroup>
+        </select>
+        
+        <!-- Input de texto que solo sale si escoges "Escribir nombre exacto" -->
+        <div id="credManualWrapper_${idx}" style="display:none; margin-top:12px; padding:12px; background:rgba(0,0,0,0.2); border-radius:var(--radius); border:1px dashed var(--border-bright);">
+          <label style="font-size:11px; color:var(--text-muted); margin-bottom:6px; display:block;">Nombre exacto configurado en n8n:</label>
+          <input type="text" class="form-control cred-manual-input" id="credManual_${idx}" placeholder="Ej. Mi Telegram Bot">
+        </div>
+
+      </div>
+    `;
   }
 
   _collectCredSelections(container, assignments) {
@@ -346,65 +376,44 @@ class VoiceController {
     
     for (let idx = 0; idx < assignments.length; idx++) {
       const a = assignments[idx];
-      const slot = container.querySelector(`.cred-slot[data-idx="${idx}"]`);
-      if (!slot) continue;
+      const selectEl = container.querySelector(`.cred-select[data-idx="${idx}"]`);
+      if (!selectEl) continue;
 
-      const modeEl = slot.querySelector(`.cred-mode`);
-      const dbIdEl = slot.querySelector(`.cred-db-id`);
-      const nameEl = slot.querySelector(`.cred-name`);
+      const selectedOpt = selectEl.options[selectEl.selectedIndex];
+      const dataType = selectedOpt.dataset.type;
+      const val = selectEl.value;
 
-      // 1. Estado FOUND
-      if (a.status === 'found') {
-        result.push({ 
-          node_type: a.node_type, 
-          credential_type: a.credential_type, 
-          credential_label: a.credential_label, 
-          mode: 'use_stored', 
-          db_credential_id: parseInt(dbIdEl?.value || '0'), 
-          credential_name: nameEl?.value || a.matches[0].name 
+      if (dataType === 'stored') {
+        result.push({
+          node_type: a.node_type,
+          credential_type: a.credential_type,
+          credential_label: a.credential_label,
+          mode: 'use_stored',
+          db_credential_id: parseInt(val),
+          credential_name: selectedOpt.dataset.name
         });
-      } 
-      
-      // 2. Estado MULTIPLE (El del select)
-      else if (a.status === 'multiple') {
-        const selectEl = slot.querySelector('.cred-select');
-        if (selectEl?.value === 'manual') {
-          const manualVal = slot.querySelector(`#credManual_${idx}`)?.value?.trim();
-          if (!manualVal) { showToast(`Ingresa el nombre manual para ${a.credential_label}`, 'warning'); return null; }
-          result.push({ 
-            node_type: a.node_type, credential_type: a.credential_type, credential_label: a.credential_label, 
-            mode: 'manual_name', manual_name: manualVal, credential_name: manualVal 
-          });
-        } else {
-          result.push({ 
-            node_type: a.node_type, credential_type: a.credential_type, credential_label: a.credential_label, 
-            mode: 'use_stored', db_credential_id: parseInt(selectEl?.value), credential_name: nameEl?.value 
-          });
+      } else if (dataType === 'manual') {
+        const manualVal = document.getElementById(`credManual_${idx}`)?.value?.trim();
+        if (!manualVal) {
+          showToast(`Ingresa el nombre manual para ${a.credential_label}`, 'warning');
+          return null; // Detenemos la recolección si faltan datos
         }
-      } 
-      
-      // 3. Estado NOT_FOUND (Los Tabs: Manual, Guide, Skip)
-      else {
-        const activeBtn = slot.querySelector('.cred-opt-btn.active');
-        const opt = activeBtn?.dataset?.opt || 'skip';
-        
-        if (opt === 'manual') {
-          const manualVal = slot.querySelector(`#credManualNotFound_${idx}`)?.value?.trim();
-          if (manualVal) {
-            result.push({ node_type: a.node_type, credential_type: a.credential_type, credential_label: a.credential_label, mode: 'manual_name', manual_name: manualVal, credential_name: manualVal });
-          } else {
-            showToast(`Ingresa el nombre de la credencial en n8n para ${a.credential_label} o elige Omitir.`, 'warning'); return null;
-          }
-        } else if (opt === 'guide') {
-          const guideVal = slot.querySelector(`#credManualAfterCreate_${idx}`)?.value?.trim();
-          if (guideVal) {
-            result.push({ node_type: a.node_type, credential_type: a.credential_type, credential_label: a.credential_label, mode: 'manual_name', manual_name: guideVal, credential_name: guideVal });
-          } else {
-            showToast(`Ingresa el nombre de la credencial que creaste para ${a.credential_label} o elige Omitir.`, 'warning'); return null;
-          }
-        } else {
-          result.push({ node_type: a.node_type, credential_type: a.credential_type, credential_label: a.credential_label, mode: 'skip', credential_name: '' });
-        }
+        result.push({
+          node_type: a.node_type,
+          credential_type: a.credential_type,
+          credential_label: a.credential_label,
+          mode: 'manual_name',
+          manual_name: manualVal,
+          credential_name: manualVal
+        });
+      } else {
+        result.push({
+          node_type: a.node_type,
+          credential_type: a.credential_type,
+          credential_label: a.credential_label,
+          mode: 'skip',
+          credential_name: ''
+        });
       }
     }
     return result;
@@ -464,56 +473,6 @@ class VoiceController {
     this.voiceStatus.className   = `voice-status ${cls}`;
   }
 }
-
-// ── Event Listeners delegados al DOM ─────────────────────────────────────
-
-// TABS: Manual, Guide, Skip
-document.addEventListener('click', e => {
-  if (!e.target.matches('.cred-opt-btn')) return;
-  e.preventDefault();
-  const idx = e.target.dataset.idx;
-  const opt = e.target.dataset.opt;
-
-  // Actualizar botones visuales
-  document.querySelectorAll(`.cred-opt-btn[data-idx="${idx}"]`).forEach(b => b.classList.remove('active'));
-  e.target.classList.add('active');
-
-  // Mostrar panel correspondiente
-  ['manual', 'guide', 'skip'].forEach(o => {
-    const panel = document.getElementById(`credOpt_${o}_${idx}`);
-    if (panel) panel.style.display = o === opt ? 'block' : 'none';
-  });
-
-  // Actualizar el valor oculto
-  const slot = e.target.closest('.cred-slot');
-  if (slot) {
-    const modeEl = slot.querySelector('.cred-mode');
-    if (modeEl) modeEl.value = opt;
-  }
-});
-
-// SELECT DROPDOWN: Múltiples credenciales
-document.addEventListener('change', e => {
-  if (!e.target.matches('.cred-select')) return;
-  const idx = e.target.dataset.idx;
-  
-  const manualWrap = document.getElementById(`credManualWrapper_${idx}`);
-  if (manualWrap) manualWrap.style.display = e.target.value === 'manual' ? 'block' : 'none';
-
-  const slot = e.target.closest('.cred-slot');
-  if (slot) {
-    const modeEl = slot.querySelector('.cred-mode');
-    const nameEl = slot.querySelector('.cred-name');
-    
-    if (e.target.value === 'manual') {
-      if (modeEl) modeEl.value = 'manual_name';
-    } else {
-      if (modeEl) modeEl.value = 'use_stored';
-      const selectedOption = e.target.options[e.target.selectedIndex];
-      if (nameEl) nameEl.value = selectedOption ? selectedOption.dataset.name : '';
-    }
-  }
-});
 
 function _featherReplace() {
   if (typeof feather !== 'undefined') feather.replace();
